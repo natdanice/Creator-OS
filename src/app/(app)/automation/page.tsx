@@ -5,15 +5,23 @@ import { automationRules, automationRuns, tasks } from "@/db/schema";
 import { getStoryDate } from "@/lib/queries/settings";
 import { RuleToggle, RunPanel, TaskCard } from "@/components/automation";
 import { Card, PageHeader, Pill } from "@/components/ui";
-import { fmt, t } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
+import { presentTask, ruleName } from "@/automation/present";
 
-export const metadata = { title: t.automation.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.automation.title };
+}
 
-export default function AutomationPage() {
+export default async function AutomationPage() {
+  const i18n = await getI18n();
+  const { t } = i18n;
   const db = getDb();
   const today = getStoryDate(db);
   const rules = db.select().from(automationRules).all();
-  const ruleName = (id: string) => rules.find((r) => r.id === id)?.name ?? id;
+  const nameOf = (id: string) => ruleName(i18n, id, rules.find((r) => r.id === id)?.name ?? id);
+  const meta = (id: string) => t.ruleMeta[id as "pq_spike"];
   const open = db.select().from(tasks).where(eq(tasks.status, "open")).orderBy(desc(tasks.forDate), tasks.id).all();
   const done = db.select().from(tasks).where(ne(tasks.status, "open")).orderBy(desc(tasks.completedAt)).all();
   const runs = db.select().from(automationRuns).orderBy(desc(automationRuns.id)).limit(8).all();
@@ -38,12 +46,12 @@ export default function AutomationPage() {
             <tbody>
               {rules.map((r) => (
                 <tr key={r.id} className="border-b border-line last:border-0">
-                  <td className="px-5 py-3 font-medium">{r.name}</td>
-                  <td className="max-w-[260px] py-3 text-ink-2">{r.trigger}</td>
+                  <td className="px-5 py-3 font-medium">{nameOf(r.id)}</td>
+                  <td className="max-w-[260px] py-3 text-ink-2">{meta(r.id)?.trigger ?? r.trigger}</td>
                   <td className="py-3">
                     <Pill tone={r.channel === "internal" ? "neutral" : "accent"}>{t.channels[r.channel]}</Pill>
                   </td>
-                  <td className="whitespace-nowrap py-3 text-ink-2">{r.schedule}</td>
+                  <td className="whitespace-nowrap py-3 text-ink-2">{t.ruleMeta.schedule}</td>
                   <td className="tabular py-3 text-xs text-muted">{r.lastRunAt ? r.lastRunAt.replace("T", " ").slice(0, 16) : t.common.none}</td>
                   <td className="px-5 py-3 text-right">
                     <RuleToggle id={r.id} enabled={r.enabled} />
@@ -72,7 +80,7 @@ export default function AutomationPage() {
       ) : (
         <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
           {open.map((tk) => (
-            <TaskCard key={tk.id} task={{ ...tk, ruleName: ruleName(tk.ruleId) }} />
+            <TaskCard key={tk.id} task={{ ...tk, ...presentTask(i18n, tk), ruleName: nameOf(tk.ruleId) }} />
           ))}
         </div>
       )}
@@ -85,7 +93,7 @@ export default function AutomationPage() {
             <ul className="space-y-2 text-sm">
               {done.map((tk) => (
                 <li key={tk.id} className="flex items-center justify-between gap-3">
-                  <span className={tk.status === "dismissed" ? "text-muted line-through" : ""}>{tk.title}</span>
+                  <span className={tk.status === "dismissed" ? "text-muted line-through" : ""}>{presentTask(i18n, tk).title}</span>
                   <Pill tone={tk.status === "done" ? "good" : "neutral"}>{tk.status === "done" ? t.automation.tasksDone : t.automation.dismiss}</Pill>
                 </li>
               ))}

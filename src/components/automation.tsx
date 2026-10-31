@@ -5,11 +5,13 @@ import { Check, Copy, ExternalLink, Play, RotateCcw, X } from "lucide-react";
 import { completeTask, dismissTask, resetTasks, runAutomationsAction, toggleRule } from "@/app/actions";
 import type { RunResult } from "@/automation/engine";
 import { btn, Pill } from "@/components/ui";
-import { fmt, t } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/client";
 
 export function RunPanel({ defaultDate }: { defaultDate: string }) {
+  const { t, dateShort } = useI18n();
   const [date, setDate] = useState(defaultDate);
-  const [result, setResult] = useState<RunResult | null>(null);
+  const [result, setResult] = useState<(RunResult & { published: number }) | null>(null);
   const [pending, start] = useTransition();
   return (
     <div className="flex flex-wrap items-end gap-3">
@@ -36,6 +38,7 @@ export function RunPanel({ defaultDate }: { defaultDate: string }) {
       {result && (
         <p role="status" className="w-full rounded-lg bg-good-soft px-3 py-2 text-sm text-good">
           {result.forDate}: {fmt(t.automation.runResult, { created: result.created, skipped: result.skipped })}
+          {result.published > 0 && ` · ${fmt(t.automation.publishedDue, { n: result.published })}`}
         </p>
       )}
     </div>
@@ -43,6 +46,7 @@ export function RunPanel({ defaultDate }: { defaultDate: string }) {
 }
 
 export function RuleToggle({ id, enabled }: { id: string; enabled: boolean }) {
+  const { t, dateShort } = useI18n();
   const [on, setOn] = useState(enabled);
   const [, start] = useTransition();
   return (
@@ -74,6 +78,7 @@ export interface TaskView {
 }
 
 export function TaskCard({ task }: { task: TaskView }) {
+  const { t, dateShort } = useI18n();
   const [text, setText] = useState(task.draftMessage);
   const [copied, setCopied] = useState(false);
   const [pending, start] = useTransition();

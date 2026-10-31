@@ -1,11 +1,12 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import type { Kpi, PlatformKey } from "@/lib/queries/overview";
 import { PLATFORM_KEYS } from "@/lib/queries/overview";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 import { signedPct } from "@/lib/format";
 
 /** Stat tile: headline value, change vs previous period, per-platform split. */
-export function KpiCard({ label, kpi, format, additive = true, hint }: { label: string; kpi: Kpi; format: (n: number) => string; additive?: boolean; hint?: string }) {
+export async function KpiCard({ label, kpi, format, additive = true, hint }: { label: string; kpi: Kpi; format: (n: number) => string; additive?: boolean; hint?: string }) {
+  const { t, date, dateShort } = await getI18n();
   const change = kpi.prev ? kpi.total / kpi.prev - 1 : 0;
   const up = change >= 0;
   const share = (p: PlatformKey) => (kpi.total ? kpi.byPlatform[p] / kpi.total : 0);

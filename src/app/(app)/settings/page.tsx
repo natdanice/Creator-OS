@@ -8,13 +8,17 @@ import { getStoryDate } from "@/lib/queries/settings";
 import { CsvImportForm, ResetDemoButton } from "@/components/DataSourceForms";
 import { Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
 import { num } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata = { title: t.settings.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.settings.title };
+}
 
 const STATUS_TONE = { success: "good", partial: "warn", failed: "bad" } as const;
 
-export default function SettingsPage() {
+export default async function SettingsPage() {
+  const { t, date, dateShort } = await getI18n();
   const db = getDb();
   const today = getStoryDate(db);
   const plats = db.select().from(platforms).all();

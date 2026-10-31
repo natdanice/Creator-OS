@@ -6,7 +6,8 @@
 import { audienceAsOf, totalFollowers } from "@/cdp/segments";
 import { recommendNextOffer } from "@/crm/nextOffer";
 import { dateTh, num, baht, signedPct } from "@/lib/format";
-import { fmt, t } from "@/lib/i18n";
+// Drafts go to Thai brands, so they are written in the data language.
+import { dataT as t, fmt } from "@/lib/i18n";
 import type { AutomationRule, TaskDraft } from "../types";
 
 export const brandSilent: AutomationRule = {
@@ -27,6 +28,7 @@ export const brandSilent: AutomationRule = {
           dedupeKey: `brand_silent_120:${s.brand.id}:${s.lastActivityAt!.slice(0, 10)}`,
           title: fmt(t.ruleTitles.brand_silent_120, { brand: s.brand.name, days: s.daysSinceLastActivity! }),
           reason: fmt(t.ruleReasons.brand_silent_120, { last: dateTh(s.lastActivityAt!), days: s.daysSinceLastActivity! }),
+          vars: { brand: s.brand.name, days: s.daysSinceLastActivity!, last: s.lastActivityAt!.slice(0, 10) },
           draftMessage: fmt(t.templates.silent, {
             greeting: fmt(t.templates.greeting, { contact: s.contact?.name ?? s.brand.name }),
             deal: lastDeal.title,

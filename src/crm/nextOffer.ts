@@ -13,7 +13,7 @@ import { eq, sql } from "drizzle-orm";
 import type { DB } from "@/db/client";
 import { contentMetricsDaily, contents, rateCard } from "@/db/schema";
 import { audienceAsOf, totalFollowers } from "@/cdp/segments";
-import { fmt, t } from "@/lib/i18n";
+import { dataT, fmt, type Dict } from "@/lib/i18n";
 import { baht, compactNum, num, pct, signedPct } from "@/lib/format";
 import { DELIVERABLE_PLATFORM } from "./deliverables";
 import { TIER_WINDOW_DAYS } from "./rules";
@@ -52,7 +52,8 @@ function categoryAvgViews(db: DB, category: string) {
   return rows.length ? rows.reduce((s, r) => s + r.views, 0) / rows.length : 0;
 }
 
-export function recommendNextOffer(db: DB, stats: BrandStats, today: string, perf?: ContentPerformance[], medianEr?: number): NextOffer {
+/** `t` picks the language of the title/reason: UI language on Brand 360, Thai (`dataT`) inside drafts. */
+export function recommendNextOffer(db: DB, stats: BrandStats, today: string, perf?: ContentPerformance[], medianEr?: number, t: Dict = dataT): NextOffer {
   const cards = db.select().from(rateCard).all();
   const card = (code: string) => cards.find((c) => c.code === code)!;
   const pkgName = (codes: string[]) => codes.map((c) => card(c).name).join(" + ");

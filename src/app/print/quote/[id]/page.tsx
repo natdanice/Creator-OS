@@ -3,12 +3,16 @@ import { eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { brandContacts, brands, deals, quoteItems, quotes, rateCard } from "@/db/schema";
 import { PrintFooter, PrintHeader } from "@/components/PrintHeader";
-import { baht, dateTh } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { baht } from "@/lib/format";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata = { title: t.quote.printTitle };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.quote.printTitle };
+}
 
 export default async function QuotePrint({ params }: { params: Promise<{ id: string }> }) {
+  const { t, date, dateShort } = await getI18n();
   const { id } = await params;
   const db = getDb();
   const q = db.select().from(quotes).where(eq(quotes.id, Number(id))).get();
@@ -32,11 +36,11 @@ export default async function QuotePrint({ params }: { params: Promise<{ id: str
             </div>
             <div>
               <dt className="inline text-muted">{t.quote.issued} </dt>
-              <dd className="inline">{dateTh(q.createdAt)}</dd>
+              <dd className="inline">{date(q.createdAt)}</dd>
             </div>
             <div>
               <dt className="inline text-muted">{t.quote.validUntil} </dt>
-              <dd className="inline">{dateTh(q.validUntil)}</dd>
+              <dd className="inline">{date(q.validUntil)}</dd>
             </div>
           </dl>
         }

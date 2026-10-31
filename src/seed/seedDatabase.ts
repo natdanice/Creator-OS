@@ -26,6 +26,8 @@ export interface SeedReport {
 /** Builds a fresh database at `file` (overwriting it) and fills it with the story. */
 export async function seedDatabase(file: string): Promise<SeedReport> {
   for (const f of [file, file + "-wal", file + "-shm"]) if (fs.existsSync(f)) fs.rmSync(f);
+  // Uploaded publisher media belongs to the old database.
+  fs.rmSync(path.join(path.dirname(file), "uploads"), { recursive: true, force: true });
   const { db, sqlite } = openDb(file);
   migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
   const rng = createRng(Number(process.env.SEED ?? 42));

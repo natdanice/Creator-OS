@@ -10,7 +10,8 @@ import { recommendNextOffer } from "@/crm/nextOffer";
 import { engagementRate } from "@/crm/rules";
 import { addDays } from "@/lib/dates";
 import { baht, dateTh, num, pct } from "@/lib/format";
-import { fmt, t } from "@/lib/i18n";
+// Drafts go to Thai brands, so they are written in the data language.
+import { dataT as t, fmt } from "@/lib/i18n";
 import { APP_URL } from "@/lib/config";
 import type { AutomationRule, RuleContext, TaskDraft } from "../types";
 
@@ -70,6 +71,7 @@ function makeRule(id: "post_plus_7" | "post_plus_30", days: 7 | 30): AutomationR
           dedupeKey: `${id}:deal:${dealId}`,
           title: fmt(t.ruleTitles[id], { brand: stats.brand.name }),
           reason: fmt(t.ruleReasons[id], { deal: deal.title, posted: dateTh(postedOn) }),
+          vars: { brand: stats.brand.name, deal: deal.title, posted: postedOn },
           draftMessage,
           brandId: deal.brandId,
           dealId,

@@ -1,8 +1,8 @@
 "use client";
 import { useState } from "react";
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { compactNum, dateThShort, num } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { compactNum, num } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/client";
 
 type Row = { date: string; tiktok: number; instagram: number; youtube: number };
 const SERIES = [
@@ -12,11 +12,12 @@ const SERIES = [
 ] as const;
 
 function TooltipBox({ active, payload, label }: { active?: boolean; payload?: { dataKey: string; value: number; color: string }[]; label?: string }) {
+  const { t, dateShort } = useI18n();
   if (!active || !payload?.length) return null;
   const total = payload.reduce((s, p) => s + p.value, 0);
   return (
     <div className="rounded-lg border border-line bg-white px-3 py-2 text-xs shadow-sm">
-      <div className="mb-1 font-medium text-ink">{label && dateThShort(label)}</div>
+      <div className="mb-1 font-medium text-ink">{label && dateShort(label)}</div>
       {payload.map((p) => (
         <div key={p.dataKey} className="flex items-center justify-between gap-6">
           <span className="flex items-center gap-1.5 text-muted">
@@ -35,6 +36,7 @@ function TooltipBox({ active, payload, label }: { active?: boolean; payload?: { 
 }
 
 export function DailyViewsChart({ data }: { data: Row[] }) {
+  const { t, dateShort } = useI18n();
   const [table, setTable] = useState(false);
   return (
     <div>
@@ -59,7 +61,7 @@ export function DailyViewsChart({ data }: { data: Row[] }) {
             <tbody className="tabular">
               {data.map((r) => (
                 <tr key={r.date} className="border-t border-line">
-                  <td className="py-1">{dateThShort(r.date)}</td>
+                  <td className="py-1">{dateShort(r.date)}</td>
                   {SERIES.map((s) => (
                     <td key={s.key} className="py-1 text-right">
                       {num(r[s.key])}
@@ -75,7 +77,7 @@ export function DailyViewsChart({ data }: { data: Row[] }) {
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 8, right: 12, bottom: 0, left: 0 }}>
               <CartesianGrid vertical={false} stroke="#ece8de" />
-              <XAxis dataKey="date" tickFormatter={dateThShort} tick={{ fontSize: 11, fill: "#6b6963" }} tickLine={false} axisLine={{ stroke: "#e3ded2" }} minTickGap={28} />
+              <XAxis dataKey="date" tickFormatter={dateShort} tick={{ fontSize: 11, fill: "#6b6963" }} tickLine={false} axisLine={{ stroke: "#e3ded2" }} minTickGap={28} />
               <YAxis tickFormatter={compactNum} tick={{ fontSize: 11, fill: "#6b6963" }} tickLine={false} axisLine={false} width={44} />
               <Tooltip content={<TooltipBox />} cursor={{ stroke: "#9a978f", strokeWidth: 1, strokeDasharray: "3 3" }} />
               <Legend

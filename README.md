@@ -26,6 +26,10 @@ Requirements: Node 22+ (tested on Node 24.19, macOS). The SQLite driver ships pr
 | `npm run typecheck` | TypeScript check |
 | `npm run db:generate` | Regenerate the SQL migration after editing `src/db/schema.ts` |
 
+**Language:** the UI is English by default; the **EN → ภาษาไทย** button in the sidebar switches every
+screen (stored in a `locale` cookie). Mock *data* stays Thai on purpose (fan comments, post titles,
+the creator's rate card, and the messages drafted to Thai brands).
+
 **Demo tip:** the whole story is anchored to a fixed “today” of **2026-10-31** (`src/lib/config.ts`),
 so the numbers are identical on any presentation day. *Settings → รีเซ็ตข้อมูลเดโม* rebuilds the DB
 between rehearsals; *Automation → ล้างงานทั้งหมด* clears just the tasks.
@@ -56,6 +60,7 @@ flowchart LR
   end
   A1 & A2 & A3 --> P --> C --> K --> G --> B
   G --> O[Overview dashboard]
+  PB[Publisher<br/>write once → TikTok / IG / YouTube] -- "published posts become contents rows" --> G
   B --> R[CRM: tiers, pipeline, quotes, reports]
   G & B --> X[Automation rules → drafted tasks → human approves]
 ```
@@ -66,6 +71,7 @@ flowchart LR
 | 2. Consent | `src/cdp/pseudonymize.ts`, `src/cdp/consent.ts` (`registerAnalyticsBasis`, `applyConsent`, `ANALYTICS_OK` filter) |
 | 3. Segment / Analytics | `src/cdp/classify/*` (classifier interface + keyword rules), `src/cdp/segments.ts` (spikes, audience), `src/crm/contentPerformance.ts`, `src/lib/queries/overview.ts` |
 | 4. Single Customer Profile | `src/crm/brandStats.ts` + `src/app/(app)/brands/[id]/page.tsx` (Brand 360) |
+| Outbound: Publisher | `src/publish/*` (types, per-platform rules, `PlatformPublisher` + `MockPublisher`, service), `src/app/api/media/route.ts` (upload), `src/app/(app)/content/page.tsx` |
 
 Stack: Next.js 16 (App Router, Server Components + Server Actions) · TypeScript · Tailwind v4 ·
 SQLite via better-sqlite3 + Drizzle ORM · Recharts. Fonts: Kanit (headings) + IBM Plex Sans Thai (body).
@@ -74,6 +80,35 @@ SQLite via better-sqlite3 + Drizzle ORM · Recharts. Fonts: Kanit (headings) + I
 computed at request time from DB rows (`src/lib/queries/*`, `src/crm/*`). The daily `comments`
 metric equals the count of comment rows for that post and day; monthly follower snapshots
 equal the starting count plus the summed `new_followers`.
+
+---
+
+## Content Publisher (one click, every platform)
+
+*Publisher* in the sidebar (`/content`):
+
+1. **Media:** upload one video or image. It's stored in `data/uploads/` on this computer only. Duration, size and orientation are read in the browser.
+2. **Main post:** caption, hashtags, content type and product category (for the CDP), and an optional link to a brand deal.
+3. **Platforms:** turn each one on or off. Any platform can **override the caption** and set its own options:
+
+| TikTok | Instagram | YouTube |
+|---|---|---|
+| who can view · allow comments / Duet / Stitch · branded-content label · photo mode for images | Reel / Feed / Story · share Reel to feed · first comment · collaborator · location · paid-partnership label | title · description · tags · Short / Video · visibility · made for kids · category · paid-promotion flag |
+
+4. **Live checks + preview** (`src/publish/rules.ts`, the same code runs in the browser and on the server):
+   caption length per platform, Instagram hashtag cap, YouTube title rules, tags length, hashtag overload,
+   image not allowed on YouTube, video length per format, Shorts orientation, captions hidden on Stories.
+   The limits are **prototype values** — confirm them against each platform's current docs before going live.
+5. **Publish now** (= the simulated story date) or **schedule**. Scheduled posts are published by the
+   daily 10:00 automation run (or "Publish now" in the queue).
+
+Linking a deal forces the disclosure labels on (and optionally adds `#ad`). When the post goes live, each
+platform's post is written to `contents` (so it appears in the CDP and Brand 360), and the deal moves to
+**Posted**, which arms the +7 / +30 report rules.
+
+**Going live later:** implement `PlatformPublisher` (`src/publish/types.ts`) with the TikTok Content
+Posting API, Instagram Graph API and YouTube Data API, and return it from `getPublisher()` in
+`src/publish/MockPublisher.ts`. Each needs an approved developer app + OAuth for the creator's account.
 
 ---
 
@@ -97,6 +132,10 @@ erDiagram
   quotes ||--o{ quote_items : lines
   rate_card ||--o{ quote_items : package
   automation_rules ||--o{ tasks : drafts
+  media_assets ||--o{ publish_jobs : uses
+  publish_jobs ||--o{ publications : "one per platform"
+  publications |o--o| contents : "becomes (when live)"
+  deals ||--o{ publish_jobs : "sponsored post for"
   platforms ||--o{ import_runs : "data source log"
 ```
 
@@ -116,6 +155,7 @@ erDiagram
 | `rate_card`, `quotes`, `quote_items` | packages, prices, generated quotes |
 | `automation_rules`, `tasks`, `automation_runs` | rules config, drafted tasks (unique `dedupe_key`), run log |
 | `import_runs` | last import status per platform (Settings → Data Sources) |
+| `media_assets`, `publish_jobs`, `publications` | Publisher: uploaded file, the write-once post, and its per-platform caption/options/status |
 | `app_settings` | `story_date` |
 
 ---
@@ -202,14 +242,16 @@ their first 30 days of metrics) · ~3,150 comments · 15 brands · 35 deals acro
 4. **Keep the rules**: content type / product category aren't exported by platforms; set them via
    the creator's tagging (the CSV adapter reads `Type`, `Category`, `Sponsored` columns) or an LLM tagger.
 5. **Link sponsored posts to deals**: API data has no `deal_id`; add a “link to deal” control on the
-   Content page (placeholder today).
+   content library (not built yet; posts made in the Publisher are already linked).
 
 **Swap the comment classifier for an LLM:** implement `CommentClassifier.classifyBatch()` in
 `src/cdp/classify/` and return it from `getClassifier()`. Nothing else changes; the classifier name is
 stored per comment so you can compare old and new labels.
 
-**Add English:** fill `src/lib/i18n/en.ts` (same shape as `th.ts`, missing keys fall back to Thai) and
-run with `NEXT_PUBLIC_LOCALE=en`.
+**Languages:** all UI strings live in `src/lib/i18n/en.ts` and `th.ts` (same shape, type-checked).
+Server components use `await getI18n()`, client components `useI18n()`. Generated data (task drafts,
+timeline notes) uses `dataT` (Thai). Tasks also store raw `vars`, so their titles and reasons render in
+the current UI language while the drafted message stays Thai.
 
 ---
 
@@ -231,30 +273,34 @@ run with `NEXT_PUBLIC_LOCALE=en`.
 |---|---|
 | Platform data (posts, metrics, comments, audience) | **Mocked**: deterministic generator in `src/cdp/adapters/mock/`, but it flows through the **real** ingest pipeline |
 | CSV import | **Real** parser + ingest (formats modelled on TikTok Studio / IG Insights / YouTube Studio exports, plus 3 tagging columns); sample files in `data/samples/` |
-| Platform APIs | **Not built**: interface ready (`PlatformAdapter`) |
+| Platform APIs (read) | **Not built**: interface ready (`PlatformAdapter`) |
+| Publishing to platforms | **Simulated** by `MockPublisher` (fake post IDs, nothing leaves the machine). Upload, per-platform customization, validation, scheduling, CDP write-back and the deal → Posted move are **real** |
+| UI languages | **Real**: English + Thai, switchable at runtime |
 | Pseudonymization, consent ledger, redaction | **Real** logic (salt is a local default; use a secret in production) |
 | Comment classification | **Real** keyword rules; LLM swap point ready. Agreement with the mock's intended labels is 100% because the mock uses clean templates. Expect lower accuracy on real comments. |
 | Tiers, Brand 360, next offer, pipeline, quotes, reports | **Real** logic over the (mock) DB |
 | Automation engine | **Real** rules + drafts; the 10:00 cron is **simulated** by a button + date picker; nothing is sent |
 | “AI Insight” | **Rule-based**, not an LLM |
 | Brands, contacts, deals, invoices | **Mocked** (fictional) |
-| Content, Inbox, Audience, Finance, Ask AI pages | **Placeholders** describing what will go there |
+| Inbox, Audience, Finance, Ask AI pages | **Placeholders** describing what will go there |
 | Auth / multi-user | Not built (single local user) |
 
 ## Project structure
 
 ```
 src/
-  app/(app)/…         pages: overview, brands (list, [id], pipeline, quotes/new), automation, settings, placeholders
+  app/(app)/…         pages: overview, content (publisher), brands (list, [id], pipeline, quotes/new), automation, settings, placeholders
   app/print/…         printable quote + performance report
   app/actions.ts      server actions (pipeline moves, quotes, automation, CSV import, demo reset)
   cdp/                adapters, ingest, pseudonymize, consent, classify, segments
   crm/                rules, brandStats, contentPerformance, nextOffer, deliverables
-  automation/         engine + rules/*
+  automation/         engine + rules/* + present.ts (task text per UI language)
+  publish/            publisher types, platform rules, MockPublisher, service
   db/                 Drizzle schema + client
   seed/               story fixtures + seedDatabase()
-  lib/                config, dates, format, i18n (th/en), queries
+  lib/                config, constants, dates, format, i18n (en/th + server/client helpers), queries
 scripts/              seed.ts, verify-story.ts
 drizzle/              SQL migration
 data/samples/         sample CSV exports
+data/uploads/         publisher media (gitignored, cleared by npm run seed)
 ```

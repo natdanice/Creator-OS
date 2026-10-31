@@ -8,11 +8,16 @@ import { getStoryDate } from "@/lib/queries/settings";
 import { BrandsTabs } from "@/components/BrandsTabs";
 import { btn, Card, PageHeader, Pill, TierBadge } from "@/components/ui";
 import { baht } from "@/lib/format";
-import { fmt, t } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata = { title: t.brands.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.brands.title };
+}
 
 export default async function BrandsPage({ searchParams }: { searchParams: Promise<{ q?: string; tier?: string; category?: string }> }) {
+  const { t, date, dateShort } = await getI18n();
   const { q = "", tier = "", category = "" } = await searchParams;
   const db = getDb();
   const today = getStoryDate(db);

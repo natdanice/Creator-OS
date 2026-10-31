@@ -1,10 +1,11 @@
 import { Construction } from "lucide-react";
 import { Card, PageHeader } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-type Key = keyof typeof t.placeholders & ("content" | "inbox" | "audience" | "finance" | "askAi");
+type Key = "content" | "inbox" | "audience" | "finance" | "askAi";
 
-export function Placeholder({ k }: { k: Key }) {
+export async function Placeholder({ k }: { k: Key }) {
+  const { t, date, dateShort } = await getI18n();
   const p = t.placeholders[k];
   return (
     <>

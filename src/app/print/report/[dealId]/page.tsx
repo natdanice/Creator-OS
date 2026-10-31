@@ -14,10 +14,14 @@ import { getStoryDate } from "@/lib/queries/settings";
 import { PrintFooter, PrintHeader } from "@/components/PrintHeader";
 import { PlatformTag } from "@/components/ui";
 import { addDays } from "@/lib/dates";
-import { dateTh, num, pct } from "@/lib/format";
-import { fmt, t } from "@/lib/i18n";
+import { num, pct } from "@/lib/format";
+import { fmt } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata = { title: t.report.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.report.title };
+}
 
 function totals(rows: (MetricTotals | null)[]): MetricTotals {
   const s = { views: 0, likes: 0, comments: 0, shares: 0, saves: 0, profileViews: 0, newFollowers: 0, er: 0 };
@@ -25,7 +29,8 @@ function totals(rows: (MetricTotals | null)[]): MetricTotals {
   return { ...s, er: engagementRate(s) };
 }
 
-function Section({ title, days, perf, posted, today }: { title: string; days: 7 | 30; perf: ContentPerformance[]; posted: string; today: string }) {
+async function Section({ title, days, perf, posted, today }: { title: string; days: 7 | 30; perf: ContentPerformance[]; posted: string; today: string }) {
+  const { t, date } = await getI18n();
   const pick = (p: ContentPerformance) => (days === 7 ? p.d7 : p.d30);
   const ready = perf.every((p) => pick(p));
   const tot = totals(perf.map(pick));
@@ -43,7 +48,7 @@ function Section({ title, days, perf, posted, today }: { title: string; days: 7 
     <section className="mb-8 break-inside-avoid">
       <h2 className="mb-3 text-lg font-medium">{title}</h2>
       {!ready ? (
-        <p className="rounded-lg bg-paper p-4 text-sm text-muted">{fmt(t.report.pending, { n: days, date: dateTh(addDays(posted, days)) })}</p>
+        <p className="rounded-lg bg-paper p-4 text-sm text-muted">{fmt(t.report.pending, { n: days, date: date(addDays(posted, days)) })}</p>
       ) : (
         <>
           <div className="mb-4 grid grid-cols-3 gap-3">
@@ -101,6 +106,7 @@ function Section({ title, days, perf, posted, today }: { title: string; days: 7 
 }
 
 export default async function ReportPrint({ params }: { params: Promise<{ dealId: string }> }) {
+  const { t, date, dateShort } = await getI18n();
   const { dealId } = await params;
   const db = getDb();
   const today = getStoryDate(db);
@@ -137,7 +143,7 @@ export default async function ReportPrint({ params }: { params: Promise<{ dealId
             </div>
             <div>
               <dt className="inline text-muted">{t.report.posted} </dt>
-              <dd className="inline">{dateTh(posted)}</dd>
+              <dd className="inline">{date(posted)}</dd>
             </div>
           </dl>
         }

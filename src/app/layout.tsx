@@ -1,20 +1,23 @@
-import type { Metadata } from "next";
 import { Kanit, IBM_Plex_Sans_Thai } from "next/font/google";
 import "./globals.css";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
+import { I18nProvider } from "@/lib/i18n/client";
 
 const kanit = Kanit({ subsets: ["thai", "latin"], weight: ["400", "500", "600"], variable: "--font-kanit", display: "swap" });
 const plex = IBM_Plex_Sans_Thai({ subsets: ["thai", "latin"], weight: ["400", "500", "600"], variable: "--font-plex-thai", display: "swap" });
 
-export const metadata: Metadata = {
-  title: { default: t.app.name, template: `%s · ${t.app.name}` },
-  description: t.app.tagline,
-};
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: { default: t.app.name, template: `%s · ${t.app.name}` }, description: t.app.tagline };
+}
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const { locale } = await getI18n();
   return (
-    <html lang="th" className={`${kanit.variable} ${plex.variable}`}>
-      <body className="min-h-screen">{children}</body>
+    <html lang={locale} className={`${kanit.variable} ${plex.variable}`}>
+      <body className="min-h-screen">
+        <I18nProvider locale={locale}>{children}</I18nProvider>
+      </body>
     </html>
   );
 }

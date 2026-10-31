@@ -19,11 +19,8 @@ export const platforms = sqliteTable("platforms", {
   color: text("color").notNull(),
 });
 
-export const CONTENT_TYPES = ["review", "tutorial", "vlog", "bts"] as const;
-export type ContentType = (typeof CONTENT_TYPES)[number];
-
-export const PRODUCT_CATEGORIES = ["skincare", "tech", "food", "home", "fashion"] as const;
-export type ProductCategory = (typeof PRODUCT_CATEGORIES)[number];
+import { CONTENT_TYPES, PRODUCT_CATEGORIES, type ContentType, type ProductCategory } from "@/lib/constants";
+export { CONTENT_TYPES, PRODUCT_CATEGORIES, type ContentType, type ProductCategory };
 
 export const contents = sqliteTable(
   "contents",
@@ -267,6 +264,7 @@ export const tasks = sqliteTable(
     brandId: integer("brand_id").references(() => brands.id),
     dealId: integer("deal_id").references(() => deals.id),
     link: text("link"), // in-app link (report, brand 360…)
+    vars: text("vars", { mode: "json" }).$type<Record<string, string | number>>(), // raw values for re-rendering title/reason per UI language
     status: text("status").$type<"open" | "done" | "dismissed">().notNull().default("open"),
     forDate: text("for_date").notNull(), // simulated "today" of the run
     createdAt: text("created_at").notNull(),
@@ -288,3 +286,56 @@ export const appSettings = sqliteTable("app_settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
+
+/* ───────────────────────────── Publisher (outbound) ───────────────────────────── */
+
+/** An uploaded video/image. The file lives in data/uploads/ (never sent anywhere in the prototype). */
+export const mediaAssets = sqliteTable("media_assets", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  originalName: text("original_name").notNull(),
+  storedName: text("stored_name").notNull(),
+  mime: text("mime").notNull(),
+  kind: text("kind").$type<"video" | "image">().notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  width: integer("width"),
+  height: integer("height"),
+  durationSec: real("duration_sec"),
+  uploadedAt: text("uploaded_at").notNull(),
+});
+
+export const PUBLISH_STATUSES = ["scheduled", "published", "failed", "cancelled", "partial"] as const;
+export type PublishStatus = (typeof PUBLISH_STATUSES)[number];
+
+/** One "write once" post: the shared caption plus which platforms it goes to. */
+export const publishJobs = sqliteTable("publish_jobs", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  mediaId: integer("media_id").notNull().references(() => mediaAssets.id),
+  caption: text("caption").notNull(),
+  hashtags: text("hashtags").notNull(),
+  contentType: text("content_type").$type<ContentType>().notNull(),
+  productCategory: text("product_category").$type<ProductCategory>().notNull(),
+  dealId: integer("deal_id").references(() => deals.id),
+  sponsored: integer("sponsored", { mode: "boolean" }).notNull().default(false),
+  scheduledAt: text("scheduled_at"), // null = publish immediately
+  status: text("status").$type<PublishStatus>().notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+/** The job as sent to one platform: final caption + platform-specific options + result. */
+export const publications = sqliteTable(
+  "publications",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    jobId: integer("job_id").notNull().references(() => publishJobs.id),
+    platformId: text("platform_id").notNull().references(() => platforms.id),
+    title: text("title"), // YouTube only
+    caption: text("caption").notNull(), // final text as posted (caption / description)
+    options: text("options", { mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    status: text("status").$type<PublishStatus>().notNull(),
+    externalId: text("external_id"),
+    contentId: integer("content_id").references(() => contents.id), // row created in the CDP once live
+    publishedAt: text("published_at"),
+    error: text("error"),
+  },
+  (t) => [index("publications_job").on(t.jobId)],
+);

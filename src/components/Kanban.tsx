@@ -4,8 +4,8 @@ import { useOptimistic, useTransition, useState } from "react";
 import { moveDealStage } from "@/app/actions";
 import type { DealStage } from "@/db/schema";
 import type { Tier } from "@/crm/rules";
-import { baht, dateThShort } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { baht } from "@/lib/format";
+import { useI18n } from "@/lib/i18n/client";
 
 export interface KanbanDeal {
   id: number;
@@ -19,6 +19,7 @@ export interface KanbanDeal {
 }
 
 export function Kanban({ deals, stages }: { deals: KanbanDeal[]; stages: readonly DealStage[] }) {
+  const { t, dateShort } = useI18n();
   const [, start] = useTransition();
   const [optimistic, move] = useOptimistic(deals, (state, { id, stage }: { id: number; stage: DealStage }) => state.map((d) => (d.id === id ? { ...d, stage } : d)));
   const [over, setOver] = useState<DealStage | null>(null);
@@ -71,7 +72,7 @@ export function Kanban({ deals, stages }: { deals: KanbanDeal[]; stages: readonl
                   <div className="mt-0.5 text-sm leading-snug">{d.title}</div>
                   <div className="mt-2 flex items-center justify-between text-xs text-muted">
                     <span className="tabular">{baht(d.value)}</span>
-                    <span>{dateThShort(d.date)}</span>
+                    <span>{dateShort(d.date)}</span>
                   </div>
                   <select
                     aria-label={t.pipeline.moveTo}

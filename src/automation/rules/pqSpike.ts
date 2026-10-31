@@ -10,7 +10,8 @@ import { ANALYTICS_OK } from "@/cdp/consent";
 import { productQuestionSpikes, SPIKE } from "@/cdp/segments";
 import { TIERS } from "@/crm/rules";
 import { addDays, isoWeekKey } from "@/lib/dates";
-import { fmt, t } from "@/lib/i18n";
+// Drafts go to Thai brands, so they are written in the data language.
+import { dataT as t, fmt } from "@/lib/i18n";
 import type { AutomationRule, TaskDraft } from "../types";
 
 export const pqSpike: AutomationRule = {
@@ -48,6 +49,7 @@ export const pqSpike: AutomationRule = {
           dedupeKey: `pq_spike:${s.category}:${isoWeekKey(ctx.today)}`,
           title: fmt(t.ruleTitles.pq_spike, { category }),
           reason: fmt(t.ruleReasons.pq_spike, { recent: s.recent, recentPerDay: s.recentPerDay.toFixed(1), baselinePerDay: s.baselinePerDay.toFixed(1), ratio }),
+          vars: { category: s.category, recent: s.recent, recentPerDay: s.recentPerDay.toFixed(1), baselinePerDay: s.baselinePerDay.toFixed(1), ratio },
           draftMessage: fmt(t.templates.spike, { category, ratio, recent: s.recent, examples, brands }),
           link: `/brands?category=${s.category}`,
         };

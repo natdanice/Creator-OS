@@ -1,10 +1,11 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Printer } from "lucide-react";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/client";
 import { btn } from "@/components/ui";
 
 export function PrintBar() {
+  const { t, dateShort } = useI18n();
   const router = useRouter();
   return (
     <div className="no-print sticky top-0 z-10 mb-6 flex items-center justify-between border-b border-line bg-paper/90 px-4 py-3 backdrop-blur">

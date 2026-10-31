@@ -1,8 +1,12 @@
 import { Placeholder } from "@/components/Placeholder";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata = { title: t.placeholders.inbox.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.placeholders.inbox.title };
+}
 
-export default function Page() {
+export default async function Page() {
+  const { t, date, dateShort } = await getI18n();
   return <Placeholder k="inbox" />;
 }

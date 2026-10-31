@@ -5,11 +5,15 @@ import { getStoryDate } from "@/lib/queries/settings";
 import { BrandsTabs } from "@/components/BrandsTabs";
 import { Kanban, type KanbanDeal } from "@/components/Kanban";
 import { PageHeader } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata = { title: t.pipeline.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.pipeline.title };
+}
 
-export default function PipelinePage() {
+export default async function PipelinePage() {
+  const { t, date, dateShort } = await getI18n();
   const db = getDb();
   const today = getStoryDate(db);
   const stats = computeBrandStats(db, today);

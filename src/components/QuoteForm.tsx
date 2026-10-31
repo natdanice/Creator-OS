@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import { createQuote } from "@/app/actions";
 import { baht } from "@/lib/format";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/client";
 import { btn } from "@/components/ui";
 
 interface Card {
@@ -19,6 +19,7 @@ interface BrandOpt {
 }
 
 export function QuoteForm({ brands, cards, initialBrand, initialCodes }: { brands: BrandOpt[]; cards: Card[]; initialBrand?: number; initialCodes: string[] }) {
+  const { t, dateShort } = useI18n();
   const [brandId, setBrandId] = useState<number>(initialBrand ?? brands[0]?.id);
   const [qty, setQty] = useState<Record<string, number>>(() => Object.fromEntries(cards.map((c) => [c.code, initialCodes.filter((x) => x === c.code).length])));
   const [discount, setDiscount] = useState(0);

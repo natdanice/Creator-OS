@@ -3,11 +3,15 @@ import { brands, deals, rateCard } from "@/db/schema";
 import { BrandsTabs } from "@/components/BrandsTabs";
 import { QuoteForm } from "@/components/QuoteForm";
 import { PageHeader } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-export const metadata = { title: t.quote.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.quote.title };
+}
 
 export default async function NewQuotePage({ searchParams }: { searchParams: Promise<{ brand?: string; codes?: string }> }) {
+  const { t, date, dateShort } = await getI18n();
   const { brand, codes } = await searchParams;
   const db = getDb();
   const allDeals = db.select().from(deals).all();

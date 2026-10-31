@@ -13,11 +13,13 @@ import { contentPerformance, sponsoredContentIdsForDeals } from "@/crm/contentPe
 import { recommendNextOffer } from "@/crm/nextOffer";
 import { getStoryDate } from "@/lib/queries/settings";
 import { ButtonLink, Card, PageHeader, Pill, PlatformTag, TierBadge } from "@/components/ui";
-import { baht, dateTh, dateThShort, num, pct } from "@/lib/format";
+import { baht, num, pct } from "@/lib/format";
 import { diffDays } from "@/lib/dates";
-import { fmt, t } from "@/lib/i18n";
+import { fmt } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
 export default async function Brand360({ params }: { params: Promise<{ id: string }> }) {
+  const { t, date, dateShort } = await getI18n();
   const { id } = await params;
   const db = getDb();
   const today = getStoryDate(db);
@@ -26,7 +28,7 @@ export default async function Brand360({ params }: { params: Promise<{ id: strin
 
   const dealIds = s.deals.map((d) => d.id);
   const perf = contentPerformance(db, sponsoredContentIdsForDeals(db, dealIds), today).sort((a, b) => (a.postedAt < b.postedAt ? 1 : -1));
-  const offer = recommendNextOffer(db, s, today, perf);
+  const offer = recommendNextOffer(db, s, today, perf, undefined, t);
   const invs = dealIds.length ? db.select().from(invoices).where(inArray(invoices.dealId, dealIds)).all() : [];
   const acts = db.select().from(activities).where(eq(activities.brandId, s.brand.id)).orderBy(desc(activities.occurredAt)).all().filter((a) => a.occurredAt.slice(0, 10) <= today);
   const cards = db.select().from(rateCard).all();
@@ -112,7 +114,7 @@ export default async function Brand360({ params }: { params: Promise<{ id: strin
                       <div className="line-clamp-1 font-medium">{p.title}</div>
                       <div className="mt-0.5 flex items-center gap-2 text-xs text-subtle">
                         <PlatformTag id={p.platformId} />
-                        {dateTh(p.postedAt)} · {dealTitle(p.dealId)}
+                        {date(p.postedAt)} · {dealTitle(p.dealId)}
                       </div>
                     </td>
                     <td className="tabular py-2.5 text-right">{p.d7 ? num(p.d7.views) : <span className="text-subtle">{t.common.notAvailable}</span>}</td>
@@ -145,7 +147,7 @@ export default async function Brand360({ params }: { params: Promise<{ id: strin
                   <tr key={d.id} className="border-b border-line last:border-0">
                     <td className="px-5 py-2.5">
                       <div className="font-medium">{d.title}</div>
-                      <div className="text-xs text-subtle">{d.postedAt ? `${t.common.postedAt} ${dateTh(d.postedAt)}` : dateTh(d.createdAt)}</div>
+                      <div className="text-xs text-subtle">{d.postedAt ? `${t.common.postedAt} ${date(d.postedAt)}` : date(d.createdAt)}</div>
                     </td>
                     <td className="py-2.5">
                       <Pill tone={d.stage === "paid" ? "good" : d.stage === "invoiced" ? "warn" : "neutral"}>{t.stages[d.stage]}</Pill>
@@ -188,13 +190,13 @@ export default async function Brand360({ params }: { params: Promise<{ id: strin
                     return (
                       <tr key={inv.id} className="border-b border-line last:border-0">
                         <td className="px-5 py-2.5 font-medium">{inv.number}</td>
-                        <td className="py-2.5">{dateTh(inv.issuedAt)}</td>
-                        <td className="py-2.5">{dateTh(inv.dueAt)}</td>
+                        <td className="py-2.5">{date(inv.issuedAt)}</td>
+                        <td className="py-2.5">{date(inv.dueAt)}</td>
                         <td className="tabular py-2.5 text-right">{baht(inv.amount)}</td>
                         <td className="px-5 py-2.5 text-right">
                           {paid ? (
                             <Pill tone="good">
-                              {t.brand360.paid} {dateThShort(inv.paidAt!)}
+                              {t.brand360.paid} {dateShort(inv.paidAt!)}
                             </Pill>
                           ) : late > 0 ? (
                             <Pill tone="bad">{fmt(t.brand360.overdue, { n: late })}</Pill>
@@ -217,7 +219,7 @@ export default async function Brand360({ params }: { params: Promise<{ id: strin
               <li key={a.id} className="relative">
                 <span className="absolute -left-[26px] top-1 h-2.5 w-2.5 rounded-full border-2 border-white bg-accent ring-1 ring-line" aria-hidden />
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
-                  <span className="tabular">{dateTh(a.occurredAt)}</span>
+                  <span className="tabular">{date(a.occurredAt)}</span>
                   <Pill>{t.activityTypes[a.type]}</Pill>
                   <span>{t.channels[a.channel]}</span>
                 </div>

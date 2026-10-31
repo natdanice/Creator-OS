@@ -6,14 +6,21 @@ import { openTasks, overviewData } from "@/lib/queries/overview";
 import { Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
 import { KpiCard } from "@/components/KpiCard";
 import { DailyViewsChart } from "@/components/charts/DailyViewsChart";
-import { compactNum, dateThShort, num, pct } from "@/lib/format";
-import { fmt, t } from "@/lib/i18n";
+import { compactNum, num, pct } from "@/lib/format";
+import { fmt } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
+import { presentTask } from "@/automation/present";
 
-export const metadata = { title: t.overview.title };
+export async function generateMetadata() {
+  const { t } = await getI18n();
+  return { title: t.overview.title };
+}
 
 const RANGES = [7, 28, 90] as const;
 
 export default async function OverviewPage({ searchParams }: { searchParams: Promise<{ range?: string }> }) {
+  const i18n = await getI18n();
+  const { t, dateShort } = i18n;
   const { range: r } = await searchParams;
   const range = RANGES.includes(Number(r) as 7) ? Number(r) : 28;
   const db = getDb();
@@ -26,7 +33,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
     <>
       <PageHeader
         title={t.overview.title}
-        subtitle={`${t.overview.subtitle} · ${dateThShort(data.window.start)} – ${dateThShort(data.window.end)}`}
+        subtitle={`${t.overview.subtitle} · ${dateShort(data.window.start)} – ${dateShort(data.window.end)}`}
         right={
           <div className="flex rounded-lg border border-line bg-white p-0.5" role="group" aria-label={t.overview.range}>
             {RANGES.map((n) => (
@@ -120,7 +127,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                     <div className="line-clamp-1 font-medium">{c.title}</div>
                     <div className="mt-0.5 flex items-center gap-2">
                       <PlatformTag id={c.platformId} />
-                      <span className="text-xs text-subtle">{dateThShort(c.postedAt)}</span>
+                      <span className="text-xs text-subtle">{dateShort(c.postedAt)}</span>
                       {c.isSponsored && <Pill tone="accent">{t.common.sponsored}</Pill>}
                     </div>
                   </td>
@@ -159,10 +166,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
               {tasks.map((tk) => (
                 <li key={tk.id}>
                   <Link href={`/automation#task-${tk.id}`} className="block rounded-lg border border-line p-3 hover:bg-paper">
-                    <div className="text-sm font-medium leading-snug">{tk.title}</div>
+                    <div className="text-sm font-medium leading-snug">{presentTask(i18n, tk).title}</div>
                     <div className="mt-1 flex items-center gap-2 text-xs text-muted">
                       <Pill tone={tk.channel === "internal" ? "neutral" : "accent"}>{t.channels[tk.channel]}</Pill>
-                      <span className="line-clamp-1">{tk.reason}</span>
+                      <span className="line-clamp-1">{presentTask(i18n, tk).reason}</span>
                     </div>
                   </Link>
                 </li>

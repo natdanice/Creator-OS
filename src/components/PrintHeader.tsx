@@ -1,7 +1,8 @@
 import { MockBadge } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 
-export function PrintHeader({ title, right }: { title: string; right: React.ReactNode }) {
+export async function PrintHeader({ title, right }: { title: string; right: React.ReactNode }) {
+  const { t, date, dateShort } = await getI18n();
   return (
     <header className="mb-8 flex items-start justify-between gap-6 border-b-2 border-ink pb-6">
       <div>
@@ -17,6 +18,7 @@ export function PrintHeader({ title, right }: { title: string; right: React.Reac
   );
 }
 
-export function PrintFooter({ text }: { text?: string }) {
+export async function PrintFooter({ text }: { text?: string }) {
+  const { t, date, dateShort } = await getI18n();
   return <footer className="mt-10 border-t border-line pt-4 text-xs text-muted">{text ?? t.report.footer} · {t.app.name}</footer>;
 }

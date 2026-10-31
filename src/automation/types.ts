@@ -18,6 +18,8 @@ export interface TaskDraft {
   brandId?: number | null;
   dealId?: number | null;
   link?: string | null;
+  /** Raw values behind title/reason so the UI can re-render them in any language. */
+  vars?: Record<string, string | number>;
 }
 
 export interface AutomationRule {

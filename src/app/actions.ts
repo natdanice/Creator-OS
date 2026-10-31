@@ -12,14 +12,26 @@ import { getDb, DB_PATH } from "@/db/client";
 import { activities, DEAL_STAGES, deals, invoices, quoteItems, quotes, rateCard, tasks, type ActivityType, type DealStage } from "@/db/schema";
 import { getStoryDate } from "@/lib/queries/settings";
 import { addDays } from "@/lib/dates";
-import { fmt, t } from "@/lib/i18n";
+import { cookies } from "next/headers";
+import { asLocale, dataT, fmt, LOCALE_COOKIE } from "@/lib/i18n";
+import { getI18n } from "@/lib/i18n/server";
 import { runAutomations, type RunResult } from "@/automation/engine";
 import { ingest } from "@/cdp/ingest";
 import { CsvAdapter } from "@/cdp/adapters/csv/CsvAdapter";
 import type { PlatformId } from "@/cdp/adapters/PlatformAdapter";
+import { cancelJob, createJob, publishDue, publishJob, type CreateResult } from "@/publish/service";
+import type { ComposeDraft } from "@/publish/types";
 
 function revalidateAll() {
   revalidatePath("/", "layout");
+}
+
+/* ───────── UI language ───────── */
+
+export async function setLocaleAction(locale: string) {
+  const store = await cookies();
+  store.set(LOCALE_COOKIE, asLocale(locale), { path: "/", maxAge: 60 * 60 * 24 * 365, sameSite: "lax" });
+  revalidateAll();
 }
 
 /* ───────── Pipeline ───────── */
@@ -57,7 +69,7 @@ export async function moveDealStage(dealId: number, stage: DealStage) {
     }
     const type = STAGE_ACTIVITY[stage] ?? "note";
     tx.insert(activities)
-      .values({ brandId: deal.brandId, dealId, type, channel: "system", summary: fmt(t.pipeline.moved, { deal: deal.title, stage: t.stages[stage] }), occurredAt: `${today}T12:00:00` })
+      .values({ brandId: deal.brandId, dealId, type, channel: "system", summary: fmt(dataT.pipeline.moved, { deal: deal.title, stage: dataT.stages[stage] }), occurredAt: `${today}T12:00:00` })
       .run();
   });
   revalidateAll();
@@ -90,7 +102,7 @@ export async function createQuote(formData: FormData) {
       else tx.update(deals).set({ value, deliverables, stage: ["lead", "brief"].includes(d.stage) ? "quotation" : d.stage }).where(eq(deals.id, dealId)).run();
     }
     if (!dealId) {
-      const title = String(formData.get("dealTitle") ?? "").trim() || t.quote.newDeal;
+      const title = String(formData.get("dealTitle") ?? "").trim() || dataT.quote.newDeal;
       dealId = tx.insert(deals).values({ brandId, title, stage: "quotation", value, deliverables, createdAt: `${today}T09:00:00` }).returning({ id: deals.id }).get().id;
     }
     const n = tx.select({ n: sql<number>`count(*)` }).from(quotes).get()!.n + 1;
@@ -100,7 +112,7 @@ export async function createQuote(formData: FormData) {
       .returning({ id: quotes.id })
       .get();
     tx.insert(quoteItems).values(items.map((i) => ({ quoteId: q.id, rateCardId: i.card.id, qty: i.qty, unitPrice: i.card.price }))).run();
-    tx.insert(activities).values({ brandId, dealId, type: "quote_sent", channel: "system", summary: `${t.quote.printTitle} ${value.toLocaleString()} ${t.common.baht}`, occurredAt: `${today}T15:00:00` }).run();
+    tx.insert(activities).values({ brandId, dealId, type: "quote_sent", channel: "system", summary: `${dataT.quote.printTitle} ${value.toLocaleString()} ${dataT.common.baht}`, occurredAt: `${today}T15:00:00` }).run();
     return q.id;
   });
   revalidateAll();
@@ -109,11 +121,14 @@ export async function createQuote(formData: FormData) {
 
 /* ───────── Automation ───────── */
 
-export async function runAutomationsAction(date: string): Promise<RunResult> {
+export async function runAutomationsAction(date: string): Promise<RunResult & { published: number }> {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new Error("bad date");
-  const res = runAutomations(getDb(), date);
+  const db = getDb();
+  // The 10:00 cron first publishes scheduled posts that are due, then evaluates the rules.
+  const published = await publishDue(db, date);
+  const res = runAutomations(db, date);
   revalidateAll();
-  return res;
+  return { ...res, published };
 }
 
 const DONE_ACTIVITY: Record<string, ActivityType | null> = {
@@ -164,6 +179,29 @@ export async function toggleRule(ruleId: string, enabled: boolean) {
   revalidateAll();
 }
 
+/* ───────── Publisher ───────── */
+
+/** Simulated "now" for publishing = the story date at the 10:00 cron time. */
+async function publishNow() {
+  return `${getStoryDate(getDb())}T10:00:00`;
+}
+
+export async function publishPostAction(draft: ComposeDraft): Promise<CreateResult> {
+  const res = await createJob(getDb(), draft, await publishNow());
+  revalidateAll();
+  return res;
+}
+
+export async function publishJobNowAction(jobId: number) {
+  await publishJob(getDb(), jobId, await publishNow());
+  revalidateAll();
+}
+
+export async function cancelJobAction(jobId: number) {
+  cancelJob(getDb(), jobId);
+  revalidateAll();
+}
+
 /* ───────── Data sources ───────── */
 
 export interface ImportState {
@@ -172,6 +210,7 @@ export interface ImportState {
 }
 
 async function runCsvImport(platform: PlatformId, metricsCsv: string, commentsCsv?: string): Promise<ImportState> {
+  const { t } = await getI18n();
   const db = getDb();
   const today = getStoryDate(db);
   let adapter: CsvAdapter;
@@ -191,6 +230,7 @@ async function runCsvImport(platform: PlatformId, metricsCsv: string, commentsCs
 }
 
 export async function importCsvAction(_prev: ImportState | null, formData: FormData): Promise<ImportState> {
+  const { t } = await getI18n();
   const platform = String(formData.get("platform")) as PlatformId;
   const metrics = formData.get("metrics");
   const comments = formData.get("comments");

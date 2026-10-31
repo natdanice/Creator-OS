@@ -3,7 +3,7 @@ import { useActionState, useTransition } from "react";
 import { FileUp, RotateCcw } from "lucide-react";
 import { importCsvAction, importSampleAction, resetDemoAction, type ImportState } from "@/app/actions";
 import { btn } from "@/components/ui";
-import { t } from "@/lib/i18n";
+import { useI18n } from "@/lib/i18n/client";
 
 function Result({ state }: { state: ImportState | null }) {
   if (!state) return null;
@@ -15,6 +15,7 @@ function Result({ state }: { state: ImportState | null }) {
 }
 
 export function CsvImportForm({ platform }: { platform: string }) {
+  const { t, dateShort } = useI18n();
   const [state, upload, uploading] = useActionState(importCsvAction, null);
   const [sampleState, loadSample, sampling] = useActionState(importSampleAction, null);
   return (
@@ -45,6 +46,7 @@ export function CsvImportForm({ platform }: { platform: string }) {
 }
 
 export function ResetDemoButton() {
+  const { t, dateShort } = useI18n();
   const [pending, start] = useTransition();
   return (
     <button className={btn.ghost} disabled={pending} onClick={() => start(() => resetDemoAction())}>

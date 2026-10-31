@@ -1,21 +1,24 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bot, Building2, Clapperboard, Inbox, LayoutDashboard, Settings, Sparkles, Users, Wallet } from "lucide-react";
-import { t } from "@/lib/i18n";
-
-const ITEMS = [
-  { href: "/", label: t.nav.overview, icon: LayoutDashboard },
-  { href: "/content", label: t.nav.content, icon: Clapperboard, soon: true },
-  { href: "/inbox", label: t.nav.inbox, icon: Inbox, soon: true },
-  { href: "/audience", label: t.nav.audience, icon: Users, soon: true },
-  { href: "/brands", label: t.nav.brands, icon: Building2 },
-  { href: "/automation", label: t.nav.automation, icon: Bot },
-  { href: "/finance", label: t.nav.finance, icon: Wallet, soon: true },
-  { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles, soon: true },
-];
+import { useTransition } from "react";
+import { Bot, Building2, Inbox, Languages, LayoutDashboard, Send, Settings, Sparkles, Users, Wallet } from "lucide-react";
+import { useI18n } from "@/lib/i18n/client";
+import { setLocaleAction } from "@/app/actions";
 
 export function Sidebar({ storyDate }: { storyDate: string }) {
+  const { t, locale } = useI18n();
+  const [switching, start] = useTransition();
+  const ITEMS = [
+    { href: "/", label: t.nav.overview, icon: LayoutDashboard },
+    { href: "/content", label: t.nav.content, icon: Send },
+    { href: "/inbox", label: t.nav.inbox, icon: Inbox, soon: true },
+    { href: "/audience", label: t.nav.audience, icon: Users, soon: true },
+    { href: "/brands", label: t.nav.brands, icon: Building2 },
+    { href: "/automation", label: t.nav.automation, icon: Bot },
+    { href: "/finance", label: t.nav.finance, icon: Wallet, soon: true },
+    { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles, soon: true },
+  ];
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   const item = (it: { href: string; label: string; icon: typeof Bot; soon?: boolean }) => {
@@ -48,6 +51,17 @@ export function Sidebar({ storyDate }: { storyDate: string }) {
         {ITEMS.map(item)}
         <div className="md:mt-auto md:border-t md:border-white/10 md:pt-2">{item({ href: "/settings", label: t.nav.settings, icon: Settings })}</div>
       </nav>
+      <button
+        onClick={() => start(() => setLocaleAction(locale === "en" ? "th" : "en"))}
+        disabled={switching}
+        aria-label={t.lang.label}
+        className="mx-3 mb-3 flex w-fit items-center gap-2 md:mb-1 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/5 hover:text-white disabled:opacity-50"
+      >
+        <Languages size={14} aria-hidden />
+        <span className="font-medium">{locale.toUpperCase()}</span>
+        <span className="text-white/40">→</span>
+        {t.lang.switchTo}
+      </button>
       <div className="hidden px-5 py-4 text-[11px] text-white/45 md:block">
         {t.app.today}
         <div className="tabular mt-0.5 text-sm text-white/80">{storyDate}</div>

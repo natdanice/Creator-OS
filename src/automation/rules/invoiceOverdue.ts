@@ -6,7 +6,8 @@ import { eq } from "drizzle-orm";
 import { deals, invoices } from "@/db/schema";
 import { diffDays } from "@/lib/dates";
 import { baht, dateTh } from "@/lib/format";
-import { fmt, t } from "@/lib/i18n";
+// Drafts go to Thai brands, so they are written in the data language.
+import { dataT as t, fmt } from "@/lib/i18n";
 import type { AutomationRule, TaskDraft } from "../types";
 
 export const OVERDUE_DAYS = 30;
@@ -24,6 +25,7 @@ export const invoiceOverdue: AutomationRule = {
           dedupeKey: `invoice_overdue_30:${inv.id}`,
           title: fmt(t.ruleTitles.invoice_overdue_30, { invoice: inv.number, brand: s.brand.name, days }),
           reason: fmt(t.ruleReasons.invoice_overdue_30, { due: dateTh(inv.dueAt), amount: baht(inv.amount) }),
+          vars: { invoice: inv.number, brand: s.brand.name, days, due: inv.dueAt, amount: inv.amount },
           draftMessage: fmt(t.templates.invoice, {
             invoice: inv.number,
             brand: s.brand.name,
