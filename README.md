@@ -15,7 +15,7 @@ npm install && npm run seed && npm run dev
 # open http://localhost:3000
 ```
 
-Requirements: Node 20+ (tested on Node 24). The database is a single local SQLite file at
+Requirements: Node 22+ (tested on Node 24.19, macOS). The SQLite driver ships prebuilt binaries for macOS, Windows and Linux, so no compiler is needed. The database is a single local SQLite file at
 `data/creator-os.db`; no server needed.
 
 | Script | What it does |

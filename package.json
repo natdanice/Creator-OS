@@ -2,6 +2,9 @@
   "name": "creator-os",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "description": "Creator OS — CDP + CRM prototype for solo influencers (mock data)",
   "scripts": {
     "dev": "next dev",
