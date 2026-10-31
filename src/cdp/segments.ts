@@ -10,7 +10,7 @@ import { ANALYTICS_OK } from "./consent";
 import { addDays, monthOf } from "@/lib/dates";
 
 /** Spike rule parameters — documented here and shown on the Automation page. */
-export const SPIKE = { recentDays: 7, baselineDays: 28, ratio: 2, minRecent: 15 } as const;
+export const SPIKE = { recentDays: 7, baselineDays: 28, ratio: 3, minRecent: 20 } as const;
 
 export interface CategorySpike {
   category: ProductCategory;

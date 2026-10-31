@@ -9,3 +9,6 @@ export const STORY_DATE = "2026-10-31";
 export const HISTORY_DAYS = 120;
 
 export const CURRENCY = "THB";
+
+/** Base URL used inside drafted messages (e.g. report links). */
+export const APP_URL = process.env.APP_URL ?? "http://localhost:3000";

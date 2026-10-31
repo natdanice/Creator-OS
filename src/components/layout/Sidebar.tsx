@@ -1,0 +1,57 @@
+"use client";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Bot, Building2, Clapperboard, Inbox, LayoutDashboard, Settings, Sparkles, Users, Wallet } from "lucide-react";
+import { t } from "@/lib/i18n";
+
+const ITEMS = [
+  { href: "/", label: t.nav.overview, icon: LayoutDashboard },
+  { href: "/content", label: t.nav.content, icon: Clapperboard, soon: true },
+  { href: "/inbox", label: t.nav.inbox, icon: Inbox, soon: true },
+  { href: "/audience", label: t.nav.audience, icon: Users, soon: true },
+  { href: "/brands", label: t.nav.brands, icon: Building2 },
+  { href: "/automation", label: t.nav.automation, icon: Bot },
+  { href: "/finance", label: t.nav.finance, icon: Wallet, soon: true },
+  { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles, soon: true },
+];
+
+export function Sidebar({ storyDate }: { storyDate: string }) {
+  const path = usePathname();
+  const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
+  const item = (it: { href: string; label: string; icon: typeof Bot; soon?: boolean }) => {
+    const Icon = it.icon;
+    const on = active(it.href);
+    return (
+      <Link
+        key={it.href}
+        href={it.href}
+        className={`group flex shrink-0 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
+          on ? "bg-white/10 text-white" : "text-white/65 hover:bg-white/5 hover:text-white"
+        }`}
+      >
+        <Icon size={18} className={on ? "text-accent" : ""} aria-hidden />
+        <span className="whitespace-nowrap">{it.label}</span>
+        {it.soon && <span className="ml-auto hidden rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/50 md:inline">{t.nav.soon}</span>}
+      </Link>
+    );
+  };
+  return (
+    <aside className="no-print sticky top-0 z-20 flex w-full flex-col bg-ink text-white md:h-screen md:w-60 md:shrink-0">
+      <div className="flex items-center gap-2 px-4 py-4 md:px-5 md:py-6">
+        <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent font-heading text-base font-semibold text-ink">C</div>
+        <div>
+          <div className="font-heading text-lg leading-none">{t.app.name}</div>
+          <div className="mt-1 text-[11px] text-white/50">{t.app.tagline}</div>
+        </div>
+      </div>
+      <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:overflow-visible md:pb-0">
+        {ITEMS.map(item)}
+        <div className="md:mt-auto md:border-t md:border-white/10 md:pt-2">{item({ href: "/settings", label: t.nav.settings, icon: Settings })}</div>
+      </nav>
+      <div className="hidden px-5 py-4 text-[11px] text-white/45 md:block">
+        {t.app.today}
+        <div className="tabular mt-0.5 text-sm text-white/80">{storyDate}</div>
+      </div>
+    </aside>
+  );
+}

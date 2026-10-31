@@ -28,7 +28,7 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
   for (const f of [file, file + "-wal", file + "-shm"]) if (fs.existsSync(f)) fs.rmSync(f);
   const { db, sqlite } = openDb(file);
   migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
-  const rng = createRng(20261031);
+  const rng = createRng(Number(process.env.SEED ?? 42));
 
   // Reference data
   db.insert(s.platforms).values(PLATFORMS.map((p) => ({ ...p }))).run();
@@ -112,7 +112,8 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
       act("draft_sent", draftAgo, "ส่งดราฟต์ให้แบรนด์ตรวจ", b.contact.channel, "11:00:00");
       if (rng.chance(0.5) && draftAgo - 2 >= (posted ?? 0)) act("revision", draftAgo - 2, "แบรนด์ขอแก้ไขเล็กน้อย (โลโก้/คำโปรย)", b.contact.channel, "16:40:00");
     }
-    if (posted !== null) act("posted", posted, `โพสต์งาน ${d.deliverables.join(" + ")}`, "system", "19:00:00");
+    const pkgNames = d.deliverables.map((c) => RATE_CARD.find((r) => r.code === c)!.name).join(" + ");
+    if (posted !== null) act("posted", posted, `โพสต์งาน ${pkgNames}`, "system", "19:00:00");
     if (atStage(d, "report_sent")) act("report_sent", posted! - 7, "ส่งรายงานผล +7 วัน", "email", "10:30:00");
     if (issued !== null) act("invoiced", issued, "ออกใบแจ้งหนี้", "email", "10:00:00");
     if (paid !== null) act("paid", paid, `รับชำระ ${value.toLocaleString()} บาท`, "system", "14:00:00");
@@ -125,6 +126,7 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
         sponsored.push({
           dealId: deal.id,
           brandName: b.name,
+          dealTitle: d.title,
           category: b.category,
           platform: DELIVERABLE_PLATFORM[item],
           postedOn: addDays(STORY_DATE, -posted),

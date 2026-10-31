@@ -16,15 +16,23 @@ export function openDb(file = DB_PATH): { db: DB; sqlite: Database.Database } {
   return { db: drizzle(sqlite, { schema }), sqlite };
 }
 
-// Reuse one connection across hot reloads in dev.
-const g = globalThis as unknown as { __creatorDb?: DB };
+// Reuse one connection across hot reloads in dev. If the file is replaced
+// (`npm run seed` or "Reset demo" while the server runs), reopen it.
+const g = globalThis as unknown as { __creatorDb?: DB; __creatorSqlite?: Database.Database; __creatorDbIno?: number };
 
 export function getDb(): DB {
-  if (!g.__creatorDb) {
-    if (!fs.existsSync(DB_PATH)) {
-      throw new Error("Database not found. Run `npm run seed` first.");
-    }
-    g.__creatorDb = openDb().db;
+  if (!fs.existsSync(DB_PATH)) {
+    throw new Error("Database not found. Run `npm run seed` first.");
+  }
+  const ino = fs.statSync(DB_PATH).ino;
+  if (!g.__creatorDb || g.__creatorDbIno !== ino) {
+    try {
+      g.__creatorSqlite?.close();
+    } catch {}
+    const { db, sqlite } = openDb();
+    g.__creatorDb = db;
+    g.__creatorSqlite = sqlite;
+    g.__creatorDbIno = ino;
   }
   return g.__creatorDb;
 }

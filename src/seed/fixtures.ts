@@ -134,5 +134,5 @@ export const AUTOMATION_RULES = [
   { id: "post_plus_30", name: "รายงานผล +30 วัน + เสนองานต่อ", trigger: "โพสต์สปอนเซอร์ครบ 30 วัน", channel: "email" as const },
   { id: "brand_silent_120", name: "ทักแบรนด์ที่เงียบไป", trigger: "แบรนด์ไม่มีการติดต่อ ≥ 120 วัน", channel: "line" as const },
   { id: "invoice_overdue_30", name: "เตือนบิลค้างชำระ", trigger: "ใบแจ้งหนี้เลยกำหนด ≥ 30 วัน", channel: "internal" as const },
-  { id: "pq_spike", name: "คำถามสินค้าพุ่ง", trigger: "คอมเมนต์ถามสินค้าในหมวด 7 วัน ≥ 2× ค่าเฉลี่ย 28 วัน", channel: "internal" as const },
+  { id: "pq_spike", name: "คำถามสินค้าพุ่ง", trigger: "คอมเมนต์ถามสินค้าในหมวด 7 วันล่าสุด ≥ 3× ค่าเฉลี่ย 28 วันก่อนหน้า (และ ≥ 20)", channel: "internal" as const },
 ];

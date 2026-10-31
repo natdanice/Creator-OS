@@ -19,6 +19,7 @@ import type { PlatformId, RawAudienceSnapshot, RawComment, RawContent, RawMetric
 export interface SponsoredSlot {
   dealId: number;
   brandName: string;
+  dealTitle: string;
   category: ProductCategory;
   platform: PlatformId;
   postedOn: string; // YYYY-MM-DD
@@ -60,7 +61,7 @@ const P: Record<
     shareRate: 0.012,
     saveRate: 0.01,
     profileRate: 0.025,
-    commentRate: 0.00045,
+    commentRate: 0.00038,
     viewMult: { review: 1.0, tutorial: 1.2, vlog: 0.8, bts: 0.9 },
     followersPer1k: { review: 3.4, tutorial: 6.6, vlog: 2.4, bts: 3.0 },
     baseFollowers: 168000,
@@ -69,13 +70,13 @@ const P: Record<
   },
   instagram: {
     postChance: 0.38,
-    medianViews: 13500,
+    medianViews: 24000,
     decay: 0.68,
     likeRate: 0.085,
     shareRate: 0.008,
     saveRate: 0.015,
     profileRate: 0.03,
-    commentRate: 0.0009,
+    commentRate: 0.0005,
     viewMult: { review: 0.9, tutorial: 1.0, vlog: 1.0, bts: 1.15 },
     followersPer1k: { review: 3.2, tutorial: 4.1, vlog: 4.6, bts: 8.8 },
     baseFollowers: 61000,
@@ -237,7 +238,7 @@ export function generateMockData(opts: GenerateOptions): Record<PlatformId, Plat
   const makePost = (p: PlatformId, day: string, type: ContentType, cat: ProductCategory, sponsoredSlot?: SponsoredSlot) => {
     const product = rng.pick(PRODUCTS[cat]);
     const title = sponsoredSlot
-      ? `${sponsoredSlot.brandName} × ${rng.pick(TITLES[type]).replace("{p}", product)}`
+      ? `${sponsoredSlot.brandName} × ${sponsoredSlot.dealTitle}${type === "tutorial" ? " (ฮาวทู)" : ""}`
       : rng.pick(TITLES[type]).replace("{p}", product);
     const mult = P[p].viewMult[type] * (sponsoredSlot ? 0.92 : 1) * (sponsoredSlot?.dedicated ? 1.15 : 1);
     posts.push({
@@ -305,12 +306,12 @@ export function generateMockData(opts: GenerateOptions): Record<PlatformId, Plat
       const day = days[k];
       const inSpike = c.productCategory === spikeCategory && day >= spikeStart;
       const share = viewsByDay[k] / Math.max(1, post.totalViews);
-      const expected = totalComments * share * (inSpike ? 1.5 : 1);
+      const expected = totalComments * share * (inSpike ? 1.8 : 1);
       let n = Math.floor(expected) + (rng.next() < expected % 1 ? 1 : 0);
       if (n > 0 && day === storyDate) n = Math.max(1, Math.round(n * 0.6)); // today is only partly over
       for (let j = 0; j < n; j++) {
         const weights: Record<CommentCategory, number> = {
-          product_question: (pqBase + (c.isSponsored ? 6 : 0)) * (inSpike ? 2.6 : 1),
+          product_question: (pqBase + (c.isSponsored ? 6 : 0)) * (inSpike ? 3 : 1),
           content_request: 12,
           general_question: 12,
           praise: 48,

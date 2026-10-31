@@ -1,0 +1,68 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink: #16181f;
+  --color-ink-2: #2a2d38;
+  --color-paper: #f4f1ea;
+  --color-card: #ffffff;
+  --color-line: #e3ded2;
+  --color-muted: #6b6963;
+  --color-subtle: #9a978f;
+  --color-accent: #f26b3a;
+  --color-accent-strong: #d9541f;
+  --color-accent-soft: #fde6dc;
+  --color-good: #1e7d4a;
+  --color-good-soft: #dff2e6;
+  --color-warn: #a86a00;
+  --color-warn-soft: #fbefd6;
+  --color-bad: #c03a2b;
+  --color-bad-soft: #fbe2df;
+  /* platform series — validated (dataviz validator, all pairs, light surface) */
+  --color-tiktok: #2a78d6;
+  --color-instagram: #d55181;
+  --color-youtube: #c98500;
+
+  --font-heading: var(--font-kanit), system-ui, sans-serif;
+  --font-sans: var(--font-plex-thai), system-ui, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+.font-heading {
+  font-family: var(--font-heading);
+  letter-spacing: -0.01em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff;
+  }
+  @page {
+    size: A4;
+    margin: 14mm;
+  }
+}

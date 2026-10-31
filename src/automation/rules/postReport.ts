@@ -11,6 +11,7 @@ import { engagementRate } from "@/crm/rules";
 import { addDays } from "@/lib/dates";
 import { baht, dateTh, num, pct } from "@/lib/format";
 import { fmt, t } from "@/lib/i18n";
+import { APP_URL } from "@/lib/config";
 import type { AutomationRule, RuleContext, TaskDraft } from "../types";
 
 function sum(perf: ContentPerformance[], pick: (p: ContentPerformance) => MetricTotals | null) {
@@ -55,8 +56,9 @@ function makeRule(id: "post_plus_7" | "post_plus_30", days: 7 | 30): AutomationR
           .filter(Boolean)
           .join("\n");
         const link = `/print/report/${dealId}`;
+        const publicLink = `${APP_URL}${link}`;
         const greeting = fmt(t.templates.greeting, { contact: stats.contact?.name ?? stats.brand.name });
-        const vars = { greeting, deal: deal.title, lines, views: num(total.views), er: pct(total.er), pq, link };
+        const vars = { greeting, deal: deal.title, lines, views: num(total.views), er: pct(total.er), pq, link: publicLink };
         let draftMessage: string;
         if (days === 7) {
           draftMessage = fmt(t.templates.report7, vars);

@@ -1,6 +1,6 @@
 /**
  * pq_spike — product-question comments in a product category over the last 7 days,
- * per day, are ≥ 2× the daily average of the previous 28 days (and ≥ 15 in total).
+ * per day, are ≥ 3× the daily average of the previous 28 days (and ≥ 20 in total).
  * Parameters: cdp/segments.ts → SPIKE. Internal alert listing brands to pitch.
  * Dedupe: category + ISO week.
  */

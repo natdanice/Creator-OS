@@ -16,6 +16,8 @@ import { audienceAsOf, totalFollowers } from "@/cdp/segments";
 import { fmt, t } from "@/lib/i18n";
 import { baht, compactNum, num, pct, signedPct } from "@/lib/format";
 import { DELIVERABLE_PLATFORM } from "./deliverables";
+import { TIER_WINDOW_DAYS } from "./rules";
+import { addDays } from "@/lib/dates";
 import type { BrandStats } from "./brandStats";
 import { contentPerformance, sponsoredContentIdsForDeals, type ContentPerformance } from "./contentPerformance";
 
@@ -88,7 +90,10 @@ export function recommendNextOffer(db: DB, stats: BrandStats, today: string, per
 
   // 3. Partner
   if (stats.tier === "partner") {
-    const paidValue = stats.deals.filter((d) => d.stage === "paid").reduce((s, d) => s + d.value, 0);
+    const windowStart = addDays(today, -(TIER_WINDOW_DAYS - 1));
+    const paidValue = stats.deals
+      .filter((d) => d.stage === "paid" && d.closedAt && d.closedAt.slice(0, 10) >= windowStart && d.closedAt.slice(0, 10) <= today)
+      .reduce((s, d) => s + d.value, 0);
     return make("retainer", ["RETAINER_Q"], t.offers.retainer, fmt(t.offers.retainerWhy, { n: stats.paidInWindow, value: baht(paidValue) }));
   }
 
