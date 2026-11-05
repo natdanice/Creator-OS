@@ -266,8 +266,44 @@ export const messages = sqliteTable(
     briefStatus: text("brief_status").$type<"none" | "new" | "converted" | "ignored">().notNull().default("none"),
     dealId: integer("deal_id").references(() => deals.id),
     taskId: integer("task_id"), // outbound message that came from an approved automation draft
+    externalId: text("external_id"), // id in the source (Gmail message id, LINE message id) — prevents double imports
   },
-  (t) => [index("messages_brand").on(t.brandId)],
+  (t) => [index("messages_brand").on(t.brandId), uniqueIndex("messages_external").on(t.externalId)],
+);
+
+/* ───────────────────────────── Connected accounts ───────────────────────────── */
+
+export const PROVIDERS = ["google", "instagram", "tiktok", "line"] as const;
+export type Provider = (typeof PROVIDERS)[number];
+
+/** One row per connected account. Tokens are encrypted (AES-256-GCM, key from AUTH_SECRET). */
+export const connections = sqliteTable("connections", {
+  provider: text("provider").$type<Provider>().primaryKey(),
+  accountName: text("account_name").notNull(),
+  accessToken: text("access_token").notNull(),
+  refreshToken: text("refresh_token"),
+  expiresAt: text("expires_at"), // ISO UTC
+  scopes: text("scopes"),
+  meta: text("meta", { mode: "json" }).$type<Record<string, string>>(),
+  connectedAt: text("connected_at").notNull(),
+  lastSyncAt: text("last_sync_at"),
+  lastError: text("last_error"),
+});
+
+/**
+ * Platforms that only report lifetime totals (Instagram, TikTok) are turned into the daily
+ * deltas the CDP stores: delta(today) = totals now − totals at the start of today.
+ */
+export const metricTotals = sqliteTable(
+  "metric_totals",
+  {
+    platformId: text("platform_id").notNull(),
+    externalId: text("external_id").notNull(),
+    baselineDate: text("baseline_date").notNull(),
+    baseline: text("baseline", { mode: "json" }).$type<Record<string, number>>().notNull(),
+    latest: text("latest", { mode: "json" }).$type<Record<string, number>>().notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.platformId, t.externalId] })],
 );
 
 /* ───────────────────────────── Automation ───────────────────────────── */

@@ -148,11 +148,14 @@ export async function ingest(db: DB, adapter: PlatformAdapter, now: string): Pro
         .onConflictDoUpdate({ target: [audienceSnapshots.platformId, audienceSnapshots.month], set: { followers: a.followers } })
         .returning({ id: audienceSnapshots.id })
         .get();
-      tx.delete(audienceBreakdown).where(eq(audienceBreakdown.snapshotId, snap.id)).run();
+      // Sources without demographics (e.g. TikTok's API) only update followers and keep the existing split.
       const rows = (["age", "gender", "country"] as const).flatMap((dimension) =>
-        Object.entries(a[dimension]).map(([bucket, pct]) => ({ snapshotId: snap.id, dimension, bucket, pct })),
+        Object.entries(a[dimension]).map(([bucket, pct]) => ({ snapshotId: snap.id, dimension, bucket, pct: Math.round(pct * 10) / 10 })),
       );
-      if (rows.length) tx.insert(audienceBreakdown).values(rows).run();
+      if (rows.length) {
+        tx.delete(audienceBreakdown).where(eq(audienceBreakdown.snapshotId, snap.id)).run();
+        tx.insert(audienceBreakdown).values(rows).run();
+      }
     }
 
     // consent stage

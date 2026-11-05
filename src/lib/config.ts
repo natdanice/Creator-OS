@@ -10,6 +10,14 @@ export const HISTORY_DAYS = 120;
 
 export const CURRENCY = "THB";
 
+/**
+ * demo = the seeded story with a fixed "today" (class presentation, Render).
+ * live = your real data: real Bangkok date, empty database, login, connected accounts.
+ */
+export const APP_MODE: "demo" | "live" = process.env.APP_MODE === "live" ? "live" : "demo";
+export const IS_LIVE = APP_MODE === "live";
+export const TIMEZONE = "Asia/Bangkok";
+
 /** Base URL used inside drafted messages (e.g. report links). */
 // On Render, RENDER_EXTERNAL_URL is set automatically to the public address.
 export const APP_URL = process.env.APP_URL ?? process.env.RENDER_EXTERNAL_URL ?? "http://localhost:3000";

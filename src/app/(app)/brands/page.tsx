@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { Search } from "lucide-react";
+import { Plus, Search } from "lucide-react";
+import { createBrandAction } from "@/app/actions";
 import { getDb } from "@/db/client";
 import { PRODUCT_CATEGORIES } from "@/db/schema";
 import { computeBrandStats } from "@/crm/brandStats";
@@ -33,6 +34,57 @@ export default async function BrandsPage({ searchParams }: { searchParams: Promi
     <>
       <PageHeader title={t.brands.title} subtitle={t.brands.subtitle} />
       <BrandsTabs active="list" />
+
+      <details className="group mb-4">
+        <summary className={`${btn.ghost} cursor-pointer list-none [&::-webkit-details-marker]:hidden`}>
+          <Plus size={16} aria-hidden /> {t.brandForm.add}
+        </summary>
+        <form action={createBrandAction} className="mt-3 grid grid-cols-1 gap-3 rounded-xl border border-line bg-card p-5 sm:grid-cols-2 xl:grid-cols-4">
+          <label className="text-xs text-muted">
+            {t.brandForm.name}
+            <input id="brand-name" name="name" required className={`${btn.input} mt-1 w-full text-ink`} />
+          </label>
+          <label className="text-xs text-muted">
+            {t.brandForm.category}
+            <select id="brand-category" name="category" className={`${btn.input} mt-1 w-full text-ink`}>
+              {PRODUCT_CATEGORIES.map((c) => (
+                <option key={c} value={c}>
+                  {t.categories[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs text-muted">
+            {t.brandForm.website}
+            <input id="brand-website" name="website" placeholder="brand.co.th" className={`${btn.input} mt-1 w-full text-ink`} />
+          </label>
+          <label className="text-xs text-muted">
+            {t.brandForm.contactName}
+            <input id="brand-contact" name="contactName" className={`${btn.input} mt-1 w-full text-ink`} />
+          </label>
+          <label className="text-xs text-muted">
+            {t.brandForm.contactRole}
+            <input id="brand-role" name="contactRole" className={`${btn.input} mt-1 w-full text-ink`} />
+          </label>
+          <label className="text-xs text-muted">
+            {t.brandForm.channel}
+            <select id="brand-channel" name="channel" className={`${btn.input} mt-1 w-full text-ink`}>
+              {(["email", "line", "ig_dm"] as const).map((c) => (
+                <option key={c} value={c}>
+                  {t.channels[c]}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-xs text-muted sm:col-span-2">
+            {t.brandForm.handle}
+            <input id="brand-handle" name="handle" className={`${btn.input} mt-1 w-full text-ink`} />
+          </label>
+          <div className="sm:col-span-2 xl:col-span-4">
+            <button className={btn.primary}>{t.brandForm.save}</button>
+          </div>
+        </form>
+      </details>
 
       <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4">
         {TIERS.map((tr) => (

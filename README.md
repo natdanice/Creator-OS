@@ -21,8 +21,11 @@ Requirements: Node 22+ (tested on Node 24.19, macOS). The SQLite driver ships pr
 | Script | What it does |
 |---|---|
 | `npm run seed` | Rebuilds `data/creator-os.db` from scratch with the seeded story (deterministic) |
-| `npm run dev` | Starts the app |
+| `npm run dev` | Starts the app (demo) |
+| `npm run dev:live` | Starts the app in live mode (your real data) |
 | `npm run start:demo` | Production start that reseeds first (used by Render) |
+| `npm run setup:live` | Creates the empty live database for your real data |
+| `npm run start:live` | Production start for live mode (applies migrations first) |
 | `npm run verify` | Checks the story on a temp copy of the DB: tiers, silent brands, spike, the exact automation tasks for the story date, inbox briefs, finance figures, audience segments and Ask AI answers |
 | `npm run typecheck` | TypeScript check |
 | `npm run db:generate` | Regenerate the SQL migration after editing `src/db/schema.ts` |
@@ -40,6 +43,42 @@ the creator's rate card, and the messages drafted to Thai brands).
 **Demo tip:** the whole story is anchored to a fixed “today” of **2026-10-31** (`src/lib/config.ts`),
 so the numbers are identical on any presentation day. *Settings → รีเซ็ตข้อมูลเดโม* rebuilds the DB
 between rehearsals; *Automation → ล้างงานทั้งหมด* clears just the tasks.
+
+---
+
+## Going live (your real data)
+
+Demo mode (the default) is the seeded story. **Live mode** is the same app on your real data:
+real Bangkok date, an empty database (`data/creator-os-live.db`), a password login, and your
+connected accounts. The two never share a database.
+
+1. `cp .env.example .env.local` and fill in the **Live mode** block (a password, `AUTH_SECRET`,
+   `CRON_SECRET`). Leave `APP_MODE` out so `npm run dev` keeps opening the demo.
+2. `npm run setup:live` creates the empty live database (it refuses to overwrite an existing one).
+3. `npm run dev:live` → sign in → **Settings**: set your rate card, then **Brands → Add brand**.
+4. Connect accounts in **Settings → Connected accounts**. Each needs a developer app on that
+   platform; put its id/secret in `.env.local` and register the redirect URL shown in Settings.
+
+| Account | What comes in | Notes |
+|---|---|---|
+| YouTube + Gmail (one Google login) | Daily video stats, comments, audience · brand emails into the Inbox (known contacts, or new briefs) · approved email replies saved as **Gmail drafts** | Google Cloud project with YouTube Data API, YouTube Analytics API and Gmail API enabled; add yourself as a test user. Analytics lags 2–3 days |
+| Instagram | Posts, insights, comments, follower demographics | Creator/Business account; demographics need ≥ 100 followers. Lifetime totals are turned into daily changes (`src/connect/totals.ts`) |
+| TikTok | Videos with views, likes, comments, shares | Display API has no comment text or demographics: keep importing the Studio CSV for those |
+| LINE OA | Brand chats into the Inbox; **Send via LINE** sends only when you click | Messaging API channel; set the webhook URL shown in Settings |
+
+**Daily job:** `GET /api/cron/daily` with `Authorization: Bearer <CRON_SECRET>` syncs every account,
+publishes due scheduled posts and runs the automations. Call it once a day (Vercel Cron, a server
+cron, or any scheduler).
+
+**Still simulated in live mode:** posting to platforms (Publisher) stays on the mock publisher until
+each platform approves the app for publishing (TikTok and YouTube keep API uploads private until
+their audit). Connector code follows each platform's documentation at the time of writing, so check
+error messages in Settings against the platform's current docs if a sync fails.
+
+**Hosting live:** live mode keeps SQLite on disk, so it needs a host with a persistent disk (your
+own computer, a VPS, or Oracle Cloud's free VM). Use `npm run build && npm run start:live`
+(`start:live` applies new migrations first). Serverless hosts without a disk (Vercel) need the
+database moved to Turso/Postgres first.
 
 ---
 
@@ -350,6 +389,8 @@ the current UI language while the drafted message stays Thai.
 | Comment replies | Status + reply text are **real** (stored); posting the reply to the platform is manual |
 | Audience segments, profiles, media kit | **Real** logic over the (mock) CDP data |
 | Finance | **Real** rollups over the (mock) invoices; the tax figures are an **estimate** (flat 3% withholding) |
+| Live mode, login, daily job | **Real**: password login, real date, empty database, `/api/cron/daily` |
+| Account connections (YouTube, Gmail, Instagram, TikTok, LINE) | **Real** code paths (OAuth, sync, webhooks), tested end to end with simulated LINE events and a mock OAuth redirect; **not yet run against your live accounts** |
 | Ask AI | **Real**, offline rule-based answers grounded in DB facts. **Optional real LLM** (Claude) when `ANTHROPIC_API_KEY` is set; not tested with a live key in this build |
 | Auth / multi-user | Not built (single local user) |
 

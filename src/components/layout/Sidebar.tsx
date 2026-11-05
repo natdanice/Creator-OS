@@ -10,7 +10,8 @@ type Item = { href: string; label: string; icon: typeof Bot; badge?: number };
 
 /** Desktop: light cream sidebar. Phone: a bottom tab bar (5 items) with the rest under "More". */
 export function Sidebar({ storyDate, inboxUnread }: { storyDate: string; inboxUnread: number }) {
-  const { t, locale } = useI18n();
+  const { t, locale, live } = useI18n();
+  const todayLabel = live ? t.app.todayLive : t.app.today;
   const [switching, start] = useTransition();
   const [moreOpen, setMoreOpen] = useState(false);
   const path = usePathname();
@@ -87,7 +88,7 @@ export function Sidebar({ storyDate, inboxUnread }: { storyDate: string; inboxUn
         <div className="space-y-3 px-5 py-4">
           {langButton}
           <div className="text-[11px] text-muted">
-            {t.app.today}
+            {todayLabel}
             <div className="tabular mt-0.5 text-sm text-ink">{storyDate}</div>
           </div>
         </div>
@@ -111,7 +112,7 @@ export function Sidebar({ storyDate, inboxUnread }: { storyDate: string; inboxUn
             <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
               {langButton}
               <span className="text-[11px] text-muted">
-                {t.app.today} <span className="tabular text-ink">{storyDate}</span>
+                {todayLabel} <span className="tabular text-ink">{storyDate}</span>
               </span>
             </div>
           </div>

@@ -9,9 +9,10 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb, DB_PATH } from "@/db/client";
-import { activities, brandContacts, comments, DEAL_STAGES, deals, invoices, messages, quoteItems, quotes, rateCard, tasks, type ActivityType, type DealStage } from "@/db/schema";
+import { activities, brandContacts, brands, comments, DEAL_STAGES, deals, invoices, messages, PRODUCT_CATEGORIES, PROVIDERS, quoteItems, quotes, rateCard, tasks, type ActivityType, type DealStage, type ProductCategory, type Provider } from "@/db/schema";
 import { getStoryDate } from "@/lib/queries/settings";
 import { addDays } from "@/lib/dates";
+import { stamp } from "@/lib/clock";
 import { cookies } from "next/headers";
 import { asLocale, dataT, fmt, LOCALE_COOKIE } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
@@ -24,9 +25,32 @@ import type { ComposeDraft } from "@/publish/types";
 import { guessDeliverables } from "@/inbox/briefDetector";
 import { gatherFacts } from "@/ai/facts";
 import { getAssistant, RuleAssistant, type Answer, type ChatTurn } from "@/ai";
+import { IS_LIVE } from "@/lib/config";
+import { accessToken, disconnect, getConnection } from "@/connect/store";
+import { syncProvider } from "@/connect/sync";
+import { createGmailDraft } from "@/connect/gmail";
+import { isLineUserId, pushLine } from "@/connect/line";
 
 function revalidateAll() {
   revalidatePath("/", "layout");
+}
+
+/* ───────── Login ───────── */
+
+export async function loginAction(formData: FormData) {
+  const { createSession, passwordMatches, SESSION_COOKIE, SESSION_DAYS } = await import("@/lib/auth");
+  const raw = String(formData.get("next") ?? "/");
+  const next = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
+  if (!(await passwordMatches(String(formData.get("password") ?? "")))) redirect(`/login?error=1&next=${encodeURIComponent(next)}`);
+  const store = await cookies();
+  store.set(SESSION_COOKIE, await createSession(), { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: SESSION_DAYS * 86_400 });
+  redirect(next);
+}
+
+export async function logoutAction() {
+  const { SESSION_COOKIE } = await import("@/lib/auth");
+  (await cookies()).delete(SESSION_COOKIE);
+  redirect("/login");
 }
 
 /* ───────── UI language ───────── */
@@ -56,8 +80,8 @@ export async function moveDealStage(dealId: number, stage: DealStage) {
   const deal = db.select().from(deals).where(eq(deals.id, dealId)).get();
   if (!deal || deal.stage === stage) return;
   const patch: Partial<typeof deals.$inferInsert> = { stage };
-  if (stage === "posted" && !deal.postedAt) patch.postedAt = `${today}T19:00:00`;
-  if (stage === "paid") patch.closedAt = `${today}T14:00:00`;
+  if (stage === "posted" && !deal.postedAt) patch.postedAt = stamp(today, "19:00:00");
+  if (stage === "paid") patch.closedAt = stamp(today, "14:00:00");
   if (stage !== "paid" && deal.closedAt) patch.closedAt = null;
   db.transaction((tx) => {
     tx.update(deals).set(patch).where(eq(deals.id, dealId)).run();
@@ -72,7 +96,7 @@ export async function moveDealStage(dealId: number, stage: DealStage) {
     }
     const type = STAGE_ACTIVITY[stage] ?? "note";
     tx.insert(activities)
-      .values({ brandId: deal.brandId, dealId, type, channel: "system", summary: fmt(dataT.pipeline.moved, { deal: deal.title, stage: dataT.stages[stage] }), occurredAt: `${today}T12:00:00` })
+      .values({ brandId: deal.brandId, dealId, type, channel: "system", summary: fmt(dataT.pipeline.moved, { deal: deal.title, stage: dataT.stages[stage] }), occurredAt: stamp(today, "12:00:00") })
       .run();
   });
   revalidateAll();
@@ -106,7 +130,7 @@ export async function createQuote(formData: FormData) {
     }
     if (!dealId) {
       const title = String(formData.get("dealTitle") ?? "").trim() || dataT.quote.newDeal;
-      dealId = tx.insert(deals).values({ brandId, title, stage: "quotation", value, deliverables, createdAt: `${today}T09:00:00` }).returning({ id: deals.id }).get().id;
+      dealId = tx.insert(deals).values({ brandId, title, stage: "quotation", value, deliverables, createdAt: stamp(today, "09:00:00") }).returning({ id: deals.id }).get().id;
     }
     const n = tx.select({ n: sql<number>`count(*)` }).from(quotes).get()!.n + 1;
     const q = tx
@@ -115,7 +139,7 @@ export async function createQuote(formData: FormData) {
       .returning({ id: quotes.id })
       .get();
     tx.insert(quoteItems).values(items.map((i) => ({ quoteId: q.id, rateCardId: i.card.id, qty: i.qty, unitPrice: i.card.price }))).run();
-    tx.insert(activities).values({ brandId, dealId, type: "quote_sent", channel: "system", summary: `${dataT.quote.printTitle} ${value.toLocaleString()} ${dataT.common.baht}`, occurredAt: `${today}T15:00:00` }).run();
+    tx.insert(activities).values({ brandId, dealId, type: "quote_sent", channel: "system", summary: `${dataT.quote.printTitle} ${value.toLocaleString()} ${dataT.common.baht}`, occurredAt: stamp(today, "15:00:00") }).run();
     return q.id;
   });
   revalidateAll();
@@ -147,7 +171,7 @@ export async function completeTask(taskId: number, finalMessage: string) {
   const db = getDb();
   const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
   if (!task || task.status !== "open") return;
-  const at = `${task.forDate}T10:30:00`;
+  const at = stamp(task.forDate, "10:30:00");
   db.transaction((tx) => {
     tx.update(tasks).set({ status: "done", draftMessage: finalMessage, completedAt: at }).where(eq(tasks.id, taskId)).run();
     const type = DONE_ACTIVITY[task.ruleId];
@@ -165,6 +189,8 @@ export async function completeTask(taskId: number, finalMessage: string) {
       tx.update(deals).set({ stage: "report_sent" }).where(and(eq(deals.id, task.dealId), eq(deals.stage, "posted"))).run();
     }
   });
+  // With Gmail connected, an approved email also becomes a Gmail draft (still not sent).
+  if (task.channel === "email" && task.brandId) await gmailDraftFor(task.brandId, task.title, finalMessage).catch((e) => console.error("Gmail draft:", e));
   revalidateAll();
 }
 
@@ -191,7 +217,7 @@ export async function toggleRule(ruleId: string, enabled: boolean) {
 /** Next timestamp in a thread: the simulated 10:00, or just after the thread's latest message. */
 function nextThreadTime(brandId: number, today: string) {
   const last = getDb().select({ at: sql<string>`max(${messages.sentAt})` }).from(messages).where(eq(messages.brandId, brandId)).get()?.at;
-  const base = `${today}T10:00:00`;
+  const base = stamp(today, "10:00:00");
   if (!last || last < base) return base;
   const d = new Date(last + "Z");
   d.setUTCMinutes(d.getUTCMinutes() + 1);
@@ -203,7 +229,7 @@ export async function markThreadRead(brandId: number) {
   const today = getStoryDate(db);
   const res = db
     .update(messages)
-    .set({ readAt: `${today}T10:00:00` })
+    .set({ readAt: stamp(today, "10:00:00") })
     .where(and(eq(messages.brandId, brandId), eq(messages.direction, "in"), sql`${messages.readAt} is null`))
     .run();
   if (res.changes) revalidateAll();
@@ -236,9 +262,9 @@ export async function convertBrief(messageId: number, title: string, value: numb
   const dealTitle = title.trim() || msg.brief?.product || dataT.quote.newDeal;
   const dealValue = Number.isFinite(value) && value > 0 ? Math.round(value) : (msg.brief?.budget ?? listPrice);
   db.transaction((tx) => {
-    const deal = tx.insert(deals).values({ brandId: msg.brandId, title: dealTitle, stage: "brief", value: dealValue, deliverables, createdAt: `${today}T10:00:00` }).returning({ id: deals.id }).get();
-    tx.update(messages).set({ briefStatus: "converted", dealId: deal.id, readAt: msg.readAt ?? `${today}T10:00:00` }).where(eq(messages.id, messageId)).run();
-    tx.insert(activities).values({ brandId: msg.brandId, dealId: deal.id, type: "brief_received", channel: msg.channel, summary: `ได้รับบรีฟ: ${dealTitle}`, occurredAt: `${today}T10:00:00` }).run();
+    const deal = tx.insert(deals).values({ brandId: msg.brandId, title: dealTitle, stage: "brief", value: dealValue, deliverables, createdAt: stamp(today, "10:00:00") }).returning({ id: deals.id }).get();
+    tx.update(messages).set({ briefStatus: "converted", dealId: deal.id, readAt: msg.readAt ?? stamp(today, "10:00:00") }).where(eq(messages.id, messageId)).run();
+    tx.insert(activities).values({ brandId: msg.brandId, dealId: deal.id, type: "brief_received", channel: msg.channel, summary: `ได้รับบรีฟ: ${dealTitle}`, occurredAt: stamp(today, "10:00:00") }).run();
   });
   revalidateAll();
 }
@@ -250,12 +276,102 @@ export async function ignoreBrief(messageId: number) {
 
 export async function replyComment(commentId: number, text: string) {
   const db = getDb();
-  db.update(comments).set({ replyStatus: "replied", replyText: text.trim() || null, repliedAt: `${getStoryDate(db)}T10:00:00` }).where(eq(comments.id, commentId)).run();
+  db.update(comments).set({ replyStatus: "replied", replyText: text.trim() || null, repliedAt: stamp(getStoryDate(db)) }).where(eq(comments.id, commentId)).run();
   revalidateAll();
 }
 
 export async function hideComment(commentId: number) {
   getDb().update(comments).set({ replyStatus: "hidden" }).where(eq(comments.id, commentId)).run();
+  revalidateAll();
+}
+
+/* ───────── Connected accounts ───────── */
+
+async function gmailDraftFor(brandId: number, subject: string, body: string) {
+  const db = getDb();
+  if (!getConnection(db, "google")) return false;
+  const contact = db.select().from(brandContacts).where(and(eq(brandContacts.brandId, brandId), eq(brandContacts.isPrimary, true))).get();
+  if (contact?.channel !== "email" || !contact.handle.includes("@")) return false;
+  await createGmailDraft(await accessToken(db, "google"), contact.handle, subject, body);
+  return true;
+}
+
+export async function saveGmailDraftAction(brandId: number, text: string): Promise<{ ok: boolean; error?: string }> {
+  const db = getDb();
+  const brand = db.select().from(brands).where(eq(brands.id, brandId)).get();
+  try {
+    return { ok: await gmailDraftFor(brandId, brand ? `${brand.name}` : "Creator OS", text) };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+}
+
+/** Really sends on LINE (only when the creator clicks), then records it like "Mark as sent". */
+export async function sendLineReplyAction(brandId: number, text: string): Promise<{ ok: boolean; error?: string }> {
+  const db = getDb();
+  const contact = db.select().from(brandContacts).where(and(eq(brandContacts.brandId, brandId), eq(brandContacts.isPrimary, true))).get();
+  if (!contact || contact.channel !== "line" || !isLineUserId(contact.handle)) return { ok: false, error: "This brand has no LINE chat" };
+  try {
+    await pushLine(contact.handle, text.trim());
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+  await sendBrandReply(brandId, text);
+  return { ok: true };
+}
+
+export async function syncNowAction(provider: string): Promise<string> {
+  if (!IS_LIVE || !PROVIDERS.includes(provider as Provider)) return "unavailable";
+  const res = await syncProvider(getDb(), provider as Provider);
+  revalidateAll();
+  return res;
+}
+
+export async function disconnectAction(provider: string) {
+  if (!PROVIDERS.includes(provider as Provider)) return;
+  disconnect(getDb(), provider as Provider);
+  revalidateAll();
+}
+
+/* ───────── Brands & rate card ───────── */
+
+export async function createBrandAction(formData: FormData) {
+  const db = getDb();
+  const today = getStoryDate(db);
+  const name = String(formData.get("name") ?? "").trim();
+  if (!name) return;
+  const category = String(formData.get("category")) as ProductCategory;
+  const channel = String(formData.get("channel")) as "line" | "email" | "ig_dm";
+  const id = db.transaction((tx) => {
+    const b = tx
+      .insert(brands)
+      .values({ name, category: PRODUCT_CATEGORIES.includes(category) ? category : "home", website: String(formData.get("website") ?? "").trim() || null, createdAt: stamp(today) })
+      .returning({ id: brands.id })
+      .get();
+    tx.insert(brandContacts)
+      .values({
+        brandId: b.id,
+        name: String(formData.get("contactName") ?? "").trim() || "—",
+        role: String(formData.get("contactRole") ?? "").trim() || "—",
+        channel: ["line", "email", "ig_dm"].includes(channel) ? channel : "line",
+        handle: String(formData.get("handle") ?? "").trim() || "—",
+        isPrimary: true,
+      })
+      .run();
+    tx.insert(activities).values({ brandId: b.id, type: "note", channel: "system", summary: "เพิ่มแบรนด์ใน Creator OS", occurredAt: stamp(today) }).run();
+    return b.id;
+  });
+  revalidateAll();
+  redirect(`/brands/${id}`);
+}
+
+export async function saveRatesAction(formData: FormData) {
+  const db = getDb();
+  for (const card of db.select().from(rateCard).all()) {
+    const raw = formData.get(`price_${card.code}`);
+    const price = Math.round(Number(raw));
+    if (raw !== null && Number.isFinite(price) && price >= 0 && price !== card.price) db.update(rateCard).set({ price }).where(eq(rateCard.id, card.id)).run();
+  }
   revalidateAll();
 }
 
@@ -292,7 +408,7 @@ export async function askAiAction(question: string, history: ChatTurn[]): Promis
 
 /** Simulated "now" for publishing = the story date at the 10:00 cron time. */
 async function publishNow() {
-  return `${getStoryDate(getDb())}T10:00:00`;
+  return stamp(getStoryDate(getDb()));
 }
 
 export async function publishPostAction(draft: ComposeDraft): Promise<CreateResult> {
@@ -328,11 +444,11 @@ async function runCsvImport(platform: PlatformId, metricsCsv: string, commentsCs
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     const { importRuns } = await import("@/db/schema");
-    db.insert(importRuns).values({ platformId: platform, adapter: "csv", startedAt: `${today}T10:05:00`, finishedAt: `${today}T10:05:00`, status: "failed", message }).run();
+    db.insert(importRuns).values({ platformId: platform, adapter: "csv", startedAt: stamp(today, "10:05:00"), finishedAt: stamp(today, "10:05:00"), status: "failed", message }).run();
     revalidateAll();
     return { ok: false, message: fmt(t.settings.importFail, { message }) };
   }
-  const r = await ingest(db, adapter, `${today}T10:05:00`);
+  const r = await ingest(db, adapter, stamp(today, "10:05:00"));
   revalidateAll();
   if (r.status === "failed") return { ok: false, message: fmt(t.settings.importFail, { message: r.message ?? "" }) };
   return { ok: true, message: fmt(t.settings.importOk, { platform: t.platforms[platform], contents: r.contents, metrics: r.metricRows, comments: r.comments }) };
@@ -349,6 +465,7 @@ export async function importCsvAction(_prev: ImportState | null, formData: FormD
 }
 
 export async function importSampleAction(_prev: ImportState | null, formData: FormData): Promise<ImportState> {
+  if (IS_LIVE) return { ok: false, message: "Sample files are only available in demo mode" };
   const platform = String(formData.get("platform")) as PlatformId;
   const dir = path.join(process.cwd(), "data", "samples");
   const metrics = fs.readFileSync(path.join(dir, `${platform}_metrics.csv`), "utf8");
@@ -359,6 +476,7 @@ export async function importSampleAction(_prev: ImportState | null, formData: Fo
 /* ───────── Demo reset ───────── */
 
 export async function resetDemoAction() {
+  if (IS_LIVE) return; // never wipe real data
   const { seedDatabase } = await import("@/seed/seedDatabase");
   const tmp = path.join(path.dirname(DB_PATH), "creator-os.next.db");
   await seedDatabase(tmp);

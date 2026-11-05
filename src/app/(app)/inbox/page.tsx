@@ -8,6 +8,10 @@ import { getStoryDate } from "@/lib/queries/settings";
 import { commentCountsByCategory, commentQueue, COMMENT_WINDOW_DAYS, inboxCounts, listThreads, NEEDS_REPLY, threadMessages } from "@/inbox/queries";
 import { getBriefDetector, guessDeliverables } from "@/inbox/briefDetector";
 import { suggestBrandReply, suggestCommentReply } from "@/inbox/replies";
+import { getConnection } from "@/connect/store";
+import { configured } from "@/connect/providers";
+import { isLineUserId } from "@/connect/line";
+import { IS_LIVE } from "@/lib/config";
 import { BriefActions, CommentReply, MarkRead, ReplyBox } from "@/components/inbox/InboxClient";
 import { btn, Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
 import { baht } from "@/lib/format";
@@ -176,12 +180,16 @@ async function BrandMessages({ i18n, today, threadParam }: { i18n: I18n; today: 
         </ol>
         <ReplyBox
           brandId={current.brandId}
+          canGmail={IS_LIVE && !!getConnection(db, "google") && contact?.channel === "email" && !!contact.handle.includes("@")}
+          canLine={configured("line") && contact?.channel === "line" && isLineUserId(contact.handle)}
           channel={t.channels[contact?.channel ?? current.channel]}
           suggestion={suggestBrandReply(contact?.name.replace(/\s*\(สมมติ\)$/, "") ?? "", lastIn ? { body: lastIn.body, brief: lastIn.brief } : null)}
         />
-        <p className="flex items-center gap-1.5 border-t border-line px-4 py-2 text-[11px] text-muted">
-          <InboxIcon size={12} aria-hidden /> {t.inbox.mockNote}
-        </p>
+        {!IS_LIVE && (
+          <p className="flex items-center gap-1.5 border-t border-line px-4 py-2 text-[11px] text-muted">
+            <InboxIcon size={12} aria-hidden /> {t.inbox.mockNote}
+          </p>
+        )}
       </Card>
     </div>
   );

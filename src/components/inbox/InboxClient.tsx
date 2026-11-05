@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState, useTransition } from "react";
-import { Check, Copy, EyeOff, Send, Sparkles } from "lucide-react";
-import { convertBrief, hideComment, ignoreBrief, markThreadRead, replyComment, sendBrandReply } from "@/app/actions";
+import { Check, Copy, EyeOff, Mail, MessageCircle, Send, Sparkles } from "lucide-react";
+import { convertBrief, hideComment, ignoreBrief, markThreadRead, replyComment, saveGmailDraftAction, sendBrandReply, sendLineReplyAction } from "@/app/actions";
 import { btn } from "@/components/ui";
 import { fmt } from "@/lib/i18n";
 import { useI18n } from "@/lib/i18n/client";
@@ -32,10 +32,11 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-export function ReplyBox({ brandId, suggestion, channel }: { brandId: number; suggestion: string; channel: string }) {
+export function ReplyBox({ brandId, suggestion, channel, canGmail = false, canLine = false }: { brandId: number; suggestion: string; channel: string; canGmail?: boolean; canLine?: boolean }) {
   const { t } = useI18n();
   const [text, setText] = useState(suggestion);
   const [pending, start] = useTransition();
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     setText(suggestion);
   }, [suggestion]);
@@ -49,11 +50,44 @@ export function ReplyBox({ brandId, suggestion, channel }: { brandId: number; su
       </label>
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <CopyButton text={text} />
-        <button className={btn.primary} disabled={pending || !text.trim()} onClick={() => start(() => sendBrandReply(brandId, text))}>
+        {canLine && (
+          <button
+            className={btn.primary}
+            disabled={pending || !text.trim()}
+            onClick={() =>
+              start(async () => {
+                const r = await sendLineReplyAction(brandId, text);
+                setNote({ ok: r.ok, text: r.ok ? t.connect.sentLine : (r.error ?? "") });
+              })
+            }
+          >
+            <MessageCircle size={14} aria-hidden /> {t.connect.sendLine}
+          </button>
+        )}
+        {canGmail && (
+          <button
+            className={btn.ghost}
+            disabled={pending || !text.trim()}
+            onClick={() =>
+              start(async () => {
+                const r = await saveGmailDraftAction(brandId, text);
+                setNote({ ok: r.ok, text: r.ok ? t.connect.gmailDraftSaved : (r.error ?? "") });
+              })
+            }
+          >
+            <Mail size={14} aria-hidden /> {t.connect.saveGmailDraft}
+          </button>
+        )}
+        <button className={canLine ? btn.ghost : btn.primary} disabled={pending || !text.trim()} onClick={() => start(() => sendBrandReply(brandId, text))}>
           <Send size={14} aria-hidden /> {t.inbox.markSent}
         </button>
         <span className="text-xs text-muted">{fmt(t.inbox.replyHint, { channel })}</span>
       </div>
+      {note && (
+        <p role="status" className={`mt-2 text-xs ${note.ok ? "text-good" : "text-bad"}`}>
+          {note.text}
+        </p>
+      )}
     </div>
   );
 }

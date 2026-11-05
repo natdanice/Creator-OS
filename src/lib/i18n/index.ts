@@ -34,6 +34,8 @@ const DATE_LOCALE: Record<Locale, string> = { en: "en-GB", th: "th-TH" };
 
 export interface I18n {
   locale: Locale;
+  /** Live mode (real data): hides demo-only UI such as the mock badge and the simulated date. */
+  live: boolean;
   t: Dict;
   /** "31 Oct 2026" / "31 ต.ค. 69" */
   date: (d: string) => string;
@@ -41,9 +43,9 @@ export interface I18n {
   dateShort: (d: string) => string;
 }
 
-export function makeI18n(locale: Locale): I18n {
+export function makeI18n(locale: Locale, live = false): I18n {
   const long = new Intl.DateTimeFormat(DATE_LOCALE[locale], { day: "numeric", month: "short", year: locale === "th" ? "2-digit" : "numeric", timeZone: "UTC" });
   const short = new Intl.DateTimeFormat(DATE_LOCALE[locale], { day: "numeric", month: "short", timeZone: "UTC" });
   const toDate = (d: string) => new Date(d.slice(0, 10) + "T00:00:00Z");
-  return { locale, t: DICTS[locale], date: (d) => long.format(toDate(d)), dateShort: (d) => short.format(toDate(d)) };
+  return { locale, live, t: DICTS[locale], date: (d) => long.format(toDate(d)), dateShort: (d) => short.format(toDate(d)) };
 }

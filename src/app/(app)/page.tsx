@@ -11,6 +11,7 @@ import { baht, compactNum, num, pct } from "@/lib/format";
 import { fmt, type I18n } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
 import { presentTask } from "@/automation/present";
+import { stamp } from "@/lib/clock";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -87,6 +88,9 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const data = overviewData(db, today, range);
   const { headline, perPlatform } = data.insight;
   const actions = todayActions(db, today).map((a) => present(i18n, today, a));
+  // Demo mode always reads 10:00; live mode follows the Bangkok clock.
+  const hour = Number(stamp(today).slice(11, 13));
+  const greeting = hour < 12 ? t.overview.greeting : hour < 17 ? t.overview.greetingAfternoon : t.overview.greetingEvening;
   const weekday = new Intl.DateTimeFormat(i18n.locale === "th" ? "th-TH" : "en-GB", { weekday: "long", timeZone: "UTC" }).format(new Date(`${today}T00:00:00Z`));
 
   return (
@@ -99,7 +103,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
           {weekday} {date(today)}
         </p>
         <h1 className="mt-1 text-2xl font-medium md:text-[30px]">
-          {t.overview.greeting}
+          {greeting}
           <span className="text-muted"> · </span>
           {actions.length === 0 ? t.overview.allClear : actions.length === 1 ? t.overview.needsYouOne : fmt(t.overview.needsYou, { n: actions.length })}
         </h1>

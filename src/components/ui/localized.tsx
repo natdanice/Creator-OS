@@ -5,7 +5,8 @@ import { useI18n } from "@/lib/i18n/client";
 import type { Tier } from "@/crm/rules";
 
 export function MockBadge() {
-  const { t } = useI18n();
+  const { t, live } = useI18n();
+  if (live) return null;
   return (
     <span title={t.app.mockBadgeTitle} className="inline-flex items-center gap-1 rounded-full border border-warn/30 bg-warn-soft px-2 py-0.5 text-[11px] font-medium text-warn">
       <Database size={11} aria-hidden />

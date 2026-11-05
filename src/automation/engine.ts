@@ -7,6 +7,7 @@
 import { eq } from "drizzle-orm";
 import type { DB } from "@/db/client";
 import { automationRules, automationRuns, tasks } from "@/db/schema";
+import { stamp } from "@/lib/clock";
 import { computeBrandStats } from "@/crm/brandStats";
 import { creatorSponsoredMedianEr } from "@/crm/nextOffer";
 import type { AutomationRule } from "./types";
@@ -27,7 +28,7 @@ export interface RunResult {
 export function runAutomations(db: DB, today: string): RunResult {
   const enabled = new Map(db.select().from(automationRules).all().map((r) => [r.id, r]));
   const ctx = { db, today, stats: computeBrandStats(db, today), medianEr: creatorSponsoredMedianEr(db, today) };
-  const ranAt = `${today}T10:00:00`;
+  const ranAt = stamp(today);
   const detail: RunResult["detail"] = {};
   let created = 0;
   let skipped = 0;

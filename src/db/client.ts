@@ -4,7 +4,8 @@ import path from "node:path";
 import fs from "node:fs";
 import * as schema from "./schema";
 
-export const DB_PATH = path.join(process.cwd(), "data", "creator-os.db");
+// Demo and live keep separate files so the class demo can never touch real data.
+export const DB_PATH = process.env.DATABASE_PATH ?? path.join(process.cwd(), "data", process.env.APP_MODE === "live" ? "creator-os-live.db" : "creator-os.db");
 
 export type DB = BetterSQLite3Database<typeof schema>;
 
@@ -22,7 +23,7 @@ const g = globalThis as unknown as { __creatorDb?: DB; __creatorSqlite?: Databas
 
 export function getDb(): DB {
   if (!fs.existsSync(DB_PATH)) {
-    throw new Error("Database not found. Run `npm run seed` first.");
+    throw new Error(process.env.APP_MODE === "live" ? "Database not found. Run `npm run setup:live` first." : "Database not found. Run `npm run seed` first.");
   }
   const ino = fs.statSync(DB_PATH).ino;
   if (!g.__creatorDb || g.__creatorDbIno !== ino) {

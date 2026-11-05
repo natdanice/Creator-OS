@@ -24,6 +24,13 @@ export interface SeedReport {
   classifierAgreement: number;
 }
 
+/** Platforms, the starting rate card and the automation rules: shared by the demo seed and `setup:live`. */
+export function insertReferenceData(db: DB, handles?: Partial<Record<string, string>>) {
+  db.insert(s.platforms).values(PLATFORMS.map((p) => ({ ...p, handle: handles?.[p.id] ?? p.handle }))).run();
+  db.insert(s.rateCard).values(RATE_CARD).run();
+  db.insert(s.automationRules).values(AUTOMATION_RULES.map((r) => ({ ...r, schedule: "ทุกวัน 10:00", enabled: true }))).run();
+}
+
 /** Builds a fresh database at `file` (overwriting it) and fills it with the story. */
 export async function seedDatabase(file: string): Promise<SeedReport> {
   for (const f of [file, file + "-wal", file + "-shm"]) if (fs.existsSync(f)) fs.rmSync(f);
@@ -33,10 +40,7 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
   migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
   const rng = createRng(Number(process.env.SEED ?? 42));
 
-  // Reference data
-  db.insert(s.platforms).values(PLATFORMS.map((p) => ({ ...p }))).run();
-  db.insert(s.rateCard).values(RATE_CARD).run();
-  db.insert(s.automationRules).values(AUTOMATION_RULES.map((r) => ({ ...r, schedule: "ทุกวัน 10:00", enabled: true }))).run();
+  insertReferenceData(db);
   db.insert(s.appSettings).values([{ key: "story_date", value: STORY_DATE }]).run();
 
   // CRM story

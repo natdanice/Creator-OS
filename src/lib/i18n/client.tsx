@@ -4,8 +4,8 @@ import { makeI18n, type I18n, type Locale } from "./index";
 
 const Ctx = createContext<I18n | null>(null);
 
-export function I18nProvider({ locale, children }: { locale: Locale; children: React.ReactNode }) {
-  const value = useMemo(() => makeI18n(locale), [locale]);
+export function I18nProvider({ locale, live = false, children }: { locale: Locale; live?: boolean; children: React.ReactNode }) {
+  const value = useMemo(() => makeI18n(locale, live), [locale, live]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

@@ -1,12 +1,18 @@
 import { desc, eq, sql } from "drizzle-orm";
 import { ArrowRight, ShieldCheck } from "lucide-react";
 import { getDb } from "@/db/client";
-import { comments, importRuns, platforms } from "@/db/schema";
+import { comments, connections, importRuns, platforms, rateCard, type Provider } from "@/db/schema";
 import { consentSummary } from "@/cdp/consent";
 import { CSV_COLUMNS } from "@/cdp/adapters/csv/CsvAdapter";
 import { getStoryDate } from "@/lib/queries/settings";
 import { CsvImportForm, ResetDemoButton } from "@/components/DataSourceForms";
-import { Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
+import { btn, Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
+import { DisconnectButton, LogoutButton, SyncButton } from "@/components/settings/ConnectionButtons";
+import { configured, envNames, redirectUri } from "@/connect/providers";
+import { saveRatesAction } from "@/app/actions";
+import { authEnabled } from "@/lib/auth";
+import { APP_URL } from "@/lib/config";
+import { fmt } from "@/lib/i18n";
 import { num } from "@/lib/format";
 import { getI18n } from "@/lib/i18n/server";
 
@@ -17,11 +23,16 @@ export async function generateMetadata() {
 
 const STATUS_TONE = { success: "good", partial: "warn", failed: "bad" } as const;
 
-export default async function SettingsPage() {
-  const { t, date, dateShort } = await getI18n();
+const PROVIDER_ORDER: Provider[] = ["google", "instagram", "tiktok", "line"];
+
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ connected?: string; connectError?: string }> }) {
+  const { connected, connectError } = await searchParams;
+  const { t, date, dateShort, live } = await getI18n();
   const db = getDb();
   const today = getStoryDate(db);
   const plats = db.select().from(platforms).all();
+  const conns = db.select().from(connections).all();
+  const cards = db.select().from(rateCard).all();
   const runs = db.select().from(importRuns).orderBy(desc(importRuns.startedAt), desc(importRuns.id)).all();
   const consent = consentSummary(db);
   const redacted = db.select({ n: sql<number>`count(*)` }).from(comments).where(eq(comments.redacted, true)).get()!.n;
@@ -34,7 +45,51 @@ export default async function SettingsPage() {
 
   return (
     <>
-      <PageHeader title={t.settings.title} subtitle={`${t.settings.storyDate}: ${today}`} />
+      <PageHeader title={t.settings.title} subtitle={`${live ? t.app.todayLive : t.settings.storyDate}: ${today}`} right={authEnabled() ? <LogoutButton /> : undefined} />
+
+      <Card id="connections" title={t.connect.title} hint={t.connect.hint} className="mb-4 scroll-mt-6" bodyClass="px-5 pb-2 pt-1">
+        {connected && <p role="status" className="mb-3 rounded-lg bg-good-soft px-3 py-2 text-sm text-good">{t.connect.connectedOk}</p>}
+        {connectError && <p role="alert" className="mb-3 rounded-lg bg-bad-soft px-3 py-2 text-sm text-bad">{fmt(t.connect.connectFailed, { error: connectError })}</p>}
+        {!live && <p className="mb-3 rounded-lg bg-paper px-3 py-2 text-sm text-ink-2">{t.connect.demoOnly}</p>}
+        <ul className="divide-y divide-line">
+          {PROVIDER_ORDER.map((p) => {
+            const conn = conns.find((c) => c.provider === p);
+            const ready = configured(p);
+            const info = t.connect.providers[p];
+            return (
+              <li key={p} className="flex flex-wrap items-start justify-between gap-3 py-4">
+                <div className="min-w-0 max-w-xl">
+                  <div className="font-medium">{info.name}</div>
+                  <p className="text-xs text-muted">{info.what}</p>
+                  {conn && (
+                    <p className="mt-1 text-xs">
+                      <span className="text-good">{fmt(t.connect.connectedAs, { account: conn.accountName })}</span>
+                      <span className="text-muted"> · {conn.lastSyncAt ? fmt(t.connect.lastSync, { when: conn.lastSyncAt.slice(0, 16).replace("T", " ") + " UTC" }) : t.connect.neverSynced}</span>
+                    </p>
+                  )}
+                  {conn?.lastError && <p className="mt-1 text-xs text-bad">{fmt(t.connect.lastError, { error: conn.lastError })}</p>}
+                  {p === "line" && ready && <p className="mt-1 text-xs text-good">{t.connect.lineReady}</p>}
+                  {!ready && <p className="mt-1 text-xs text-warn">{fmt(t.connect.notConfigured, { env: envNames(p).join(" + ") })}</p>}
+                  {live && (
+                    <p className="mt-1 break-all text-[11px] text-subtle">
+                      {p === "line" ? t.connect.webhookUrl : t.connect.redirectUrl}: <code>{p === "line" ? `${APP_URL}/api/webhooks/line` : redirectUri(p)}</code>
+                    </p>
+                  )}
+                </div>
+                {live && ready && p !== "line" && (
+                  <div className="flex flex-wrap items-center gap-3">
+                    {conn && <SyncButton provider={p} />}
+                    <a href={`/api/connect/${p}`} className={conn ? btn.ghost : btn.primary}>
+                      {conn ? t.connect.reconnect : t.connect.connect}
+                    </a>
+                    {conn && <DisconnectButton provider={p} />}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      </Card>
 
       <Card title={t.settings.pipeline} className="mb-4">
         <ol className="grid grid-cols-1 gap-2 md:grid-cols-4">
@@ -158,16 +213,38 @@ export default async function SettingsPage() {
           }
         >
           <ul className="list-disc space-y-1.5 pl-5 text-sm text-ink-2">
-            {t.settings.pdpa.map((line) => (
+            {(live ? t.settings.pdpa.slice(0, -1) : t.settings.pdpa).map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>
         </Card>
       </div>
 
-      <Card title={t.settings.demo} hint={t.settings.demoHint} className="mt-4">
-        <ResetDemoButton />
+      <Card title={t.rates.title} hint={t.rates.hint} className="mt-4">
+        <form action={saveRatesAction}>
+          <div className="grid grid-cols-1 gap-x-6 gap-y-2 md:grid-cols-2">
+            {cards.map((c) => (
+              <label key={c.code} className="flex items-center justify-between gap-3 border-b border-line py-2 text-sm">
+                <span className="min-w-0">
+                  <span className="block truncate">{c.name}</span>
+                  <span className="block truncate text-xs text-muted">{c.description}</span>
+                </span>
+                <span className="flex shrink-0 items-center gap-1 text-muted">
+                  ฿
+                  <input id={`price_${c.code}`} name={`price_${c.code}`} defaultValue={c.price} inputMode="numeric" className={`${btn.input} tabular w-28 text-right`} />
+                </span>
+              </label>
+            ))}
+          </div>
+          <button className={`${btn.primary} mt-4`}>{t.rates.save}</button>
+        </form>
       </Card>
+
+      {!live && (
+        <Card title={t.settings.demo} hint={t.settings.demoHint} className="mt-4">
+          <ResetDemoButton />
+        </Card>
+      )}
     </>
   );
 }

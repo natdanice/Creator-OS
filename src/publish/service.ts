@@ -12,6 +12,7 @@ import { activities, contents, deals, mediaAssets, publications, publishJobs, ty
 import { stageAtLeast } from "@/crm/rules";
 import { dataT, fmt } from "@/lib/i18n";
 import { getPublisher } from "./MockPublisher";
+import { stamp } from "@/lib/clock";
 import { effectiveOptions, enabledPlatforms, finalCaption, validatePlatform, validateSchedule, type Issue } from "./rules";
 import type { ComposeDraft, MediaInfo, PlatformId } from "./types";
 
@@ -148,7 +149,7 @@ export async function publishJob(db: DB, jobId: number, at: string) {
 
 /** Publish every scheduled job due at or before `today` 10:00 (the simulated cron). */
 export async function publishDue(db: DB, today: string): Promise<number> {
-  const cutoff = `${today}T10:00:00`;
+  const cutoff = stamp(today);
   const due = db
     .select()
     .from(publishJobs)

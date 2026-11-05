@@ -15,7 +15,7 @@ function Result({ state }: { state: ImportState | null }) {
 }
 
 export function CsvImportForm({ platform }: { platform: string }) {
-  const { t, dateShort } = useI18n();
+  const { t, live } = useI18n();
   const [state, upload, uploading] = useActionState(importCsvAction, null);
   const [sampleState, loadSample, sampling] = useActionState(importSampleAction, null);
   return (
@@ -34,12 +34,15 @@ export function CsvImportForm({ platform }: { platform: string }) {
           <FileUp size={14} aria-hidden /> {t.settings.import}
         </button>
       </form>
-      <form action={loadSample}>
-        <input type="hidden" name="platform" value={platform} />
-        <button className="w-full text-center text-xs text-accent-strong hover:underline disabled:opacity-50" disabled={sampling}>
-          {t.settings.loadSample}
-        </button>
-      </form>
+      {/* Sample files are demo data; never offer them against the real database. */}
+      {!live && (
+        <form action={loadSample}>
+          <input type="hidden" name="platform" value={platform} />
+          <button className="w-full text-center text-xs text-accent-strong hover:underline disabled:opacity-50" disabled={sampling}>
+            {t.settings.loadSample}
+          </button>
+        </form>
+      )}
       <Result state={state ?? sampleState} />
     </div>
   );
