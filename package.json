@@ -16,6 +16,7 @@
     "seed": "tsx scripts/seed.ts",
     "setup:live": "tsx scripts/setup-live.ts",
     "migrate": "tsx scripts/migrate.ts",
+    "import:workbook": "tsx scripts/import-workbook.ts",
     "verify": "tsx scripts/verify-story.ts",
     "typecheck": "tsc --noEmit",
     "db:generate": "drizzle-kit generate"
@@ -28,6 +29,7 @@
     "next": "^16.4.3",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "read-excel-file": "^5.8.0",
     "recharts": "^3.10.1"
   },
   "devDependencies": {

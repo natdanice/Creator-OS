@@ -35,8 +35,8 @@ export const th = {
   },
   navTabs: { overview: "วันนี้", inbox: "ข้อความ", content: "โพสต์", brands: "แบรนด์" },
   platforms: { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", all: "ทุกแพลตฟอร์ม" },
-  contentTypes: { review: "รีวิว", tutorial: "ฮาวทู", vlog: "วล็อก", bts: "เบื้องหลัง" },
-  categories: { skincare: "สกินแคร์", tech: "แกดเจ็ต", food: "อาหาร", home: "ของใช้ในบ้าน", fashion: "แฟชั่น" },
+  contentTypes: { review: "รีวิว", tutorial: "ฮาวทู", vlog: "วล็อก", bts: "เบื้องหลัง", cover: "คัฟเวอร์", reply: "ตอบคอมเมนต์", lifestyle: "ไลฟ์สไตล์" },
+  categories: { skincare: "สกินแคร์", tech: "แกดเจ็ต", food: "อาหาร", home: "ของใช้ในบ้าน", fashion: "แฟชั่น", music: "ดนตรี" },
   commentCategories: {
     product_question: "ถามเรื่องสินค้า",
     content_request: "ขอคอนเทนต์",
@@ -456,6 +456,8 @@ export const th = {
     import: "นำเข้า",
     loadSample: "นำเข้าไฟล์ตัวอย่าง",
     csvColumns: "คอลัมน์ที่ต้องมี",
+    chooseFileFirst: "เลือกไฟล์ CSV ก่อน แล้วค่อยกดนำเข้า",
+    excelHint: "ไฟล์นี้เป็น Excel ให้ใช้ “นำเข้าไฟล์ Excel ของคุณ (.xlsx)” ด้านบนแทน",
     importOk: "นำเข้า {platform} สำเร็จ: {contents} โพสต์ · {metrics} แถวเมตริก · {comments} คอมเมนต์",
     importFail: "นำเข้าไม่สำเร็จ: {message}",
     pipeline: "เส้นทางข้อมูลใน CDP",
@@ -552,6 +554,7 @@ export const th = {
     country: "ประเทศ",
     genders: { female: "หญิง", male: "ชาย", other: "อื่นๆ" },
     countries: { TH: "ไทย", LA: "ลาว", MY: "มาเลเซีย", US: "สหรัฐฯ", other: "อื่นๆ" },
+    splitFrom: "ข้อมูลสัดส่วนล่าสุดที่มี: {month}",
     segments: "กลุ่มผู้ชม",
     segmentsHint: "จากคอมเมนต์ที่มีฐานทางกฎหมายใน {days} วันล่าสุด · ผู้ชมที่ใช้งาน {active} คน · ตัดบัญชีสแปม {spam} บัญชี",
     segs: {
@@ -753,6 +756,7 @@ export const th = {
     tagline: "คำโปรยใน Media kit",
     taglinePh: "เช่น รีวิวสกินแคร์และแกดเจ็ตแบบตรงไปตรงมา",
     handles: "ชื่อบัญชี",
+    followers: "ผู้ติดตาม {platform} ตอนนี้ (ถ้าไฟล์ไม่มีข้อมูลนี้)",
     save: "บันทึกโปรไฟล์",
   },
   crmImport: {
@@ -763,6 +767,14 @@ export const th = {
     import: "นำเข้า",
     done: "แบรนด์ใหม่ {brands} · ดีล {deals} · ใบแจ้งหนี้ {invoices} · มีอยู่แล้ว {skipped}",
     columns: "คอลัมน์: brand, category (skincare/tech/food/home/fashion), ผู้ติดต่อ, stage (lead … paid), value, deliverables (รหัสใน rate card เช่น TT_VIDEO+IG_REEL), วันที่แบบ YYYY-MM-DD",
+  },
+  workbook: {
+    title: "นำเข้าไฟล์ Excel ของคุณ (.xlsx)",
+    hint: "ไฟล์ Excel ของคุณเอง ระบบรู้จักชีตชื่อ TikTok_Clips, IG_Posts, TikTok_Daily, TikTok_Followers_Daily และชีตข้อมูลผู้ชมโดยอัตโนมัติ เลือกได้หลายไฟล์พร้อมกัน และนำเข้าซ้ำเพื่ออัปเดตตัวเลขได้",
+    files: "ไฟล์ Excel",
+    import: "นำเข้าไฟล์",
+    done: "โพสต์ {posts} · ข้อมูลรายวันของบัญชี {days} วัน · ข้อมูลผู้ชม {months} เดือน",
+    brands: "แบรนด์ใหม่จากโพสต์ Product ที่แท็ก: {list}",
   },
   mediaKit: {
     title: "Media kit",

@@ -5,7 +5,7 @@ import { comments, connections, importRuns, platforms, rateCard, type Provider }
 import { consentSummary } from "@/cdp/consent";
 import { CSV_COLUMNS } from "@/cdp/adapters/csv/CsvAdapter";
 import { getStoryDate } from "@/lib/queries/settings";
-import { CrmImportForm, CsvImportForm, ResetDemoButton } from "@/components/DataSourceForms";
+import { CrmImportForm, CsvImportForm, ResetDemoButton, WorkbookImportForm } from "@/components/DataSourceForms";
 import { getProfile } from "@/lib/queries/profile";
 import { btn, Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
 import { DisconnectButton, LogoutButton, SyncButton } from "@/components/settings/ConnectionButtons";
@@ -35,6 +35,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const conns = db.select().from(connections).all();
   const cards = db.select().from(rateCard).all();
   const profile = getProfile(db);
+  const followersOf = (p: string) => db.get<{ f: number } | undefined>(sql`select followers as f from audience_snapshots where platform_id = ${p} order by month desc limit 1`)?.f ?? 0;
   const runs = db.select().from(importRuns).orderBy(desc(importRuns.startedAt), desc(importRuns.id)).all();
   const consent = consentSummary(db);
   const redacted = db.select({ n: sql<number>`count(*)` }).from(comments).where(eq(comments.redacted, true)).get()!.n;
@@ -63,6 +64,12 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <label key={p} className="text-xs text-muted">
               {t.platforms[p]}
               <input id={`profile-${p}`} name={`handle_${p}`} defaultValue={profile.handles[p] ?? ""} placeholder={p === "youtube" ? "Channel name" : "@handle"} className={`${btn.input} mt-1 w-full text-ink`} />
+            </label>
+          ))}
+          {(["instagram", "youtube"] as const).map((p) => (
+            <label key={`f-${p}`} className="text-xs text-muted">
+              {fmt(t.profile.followers, { platform: t.platforms[p] })}
+              <input id={`profile-followers-${p}`} name={`followers_${p}`} inputMode="numeric" placeholder={String(followersOf(p) || "")} className={`${btn.input} mt-1 w-full text-ink`} />
             </label>
           ))}
           <div className="flex items-end">
@@ -126,6 +133,10 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </li>
           ))}
         </ol>
+      </Card>
+
+      <Card title={t.workbook.title} hint={t.workbook.hint} className="mb-4">
+        <WorkbookImportForm />
       </Card>
 
       <h2 className="mb-1 text-lg font-medium">{t.settings.dataSources}</h2>

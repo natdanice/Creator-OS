@@ -271,6 +271,27 @@ export const messages = sqliteTable(
   (t) => [index("messages_brand").on(t.brandId), uniqueIndex("messages_external").on(t.externalId)],
 );
 
+/**
+ * Account-level daily totals (e.g. TikTok Studio "Overview"). When present for a platform,
+ * the Overview uses these for daily views/followers instead of summing per-post rows.
+ */
+export const accountDaily = sqliteTable(
+  "account_daily",
+  {
+    platformId: text("platform_id").notNull().references(() => platforms.id),
+    date: text("date").notNull(),
+    views: integer("views").notNull().default(0),
+    profileViews: integer("profile_views").notNull().default(0),
+    likes: integer("likes").notNull().default(0),
+    comments: integer("comments").notNull().default(0),
+    shares: integer("shares").notNull().default(0),
+    newFollowers: integer("new_followers").notNull().default(0),
+    lostFollowers: integer("lost_followers"),
+    followers: integer("followers"),
+  },
+  (t) => [primaryKey({ columns: [t.platformId, t.date] })],
+);
+
 /* ───────────────────────────── Connected accounts ───────────────────────────── */
 
 export const PROVIDERS = ["google", "instagram", "tiktok", "line"] as const;

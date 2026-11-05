@@ -16,6 +16,10 @@ import { addDays, addMonths, daysBetween, monthOf } from "@/lib/dates";
 import type { Rng } from "@/lib/rng";
 import type { PlatformId, RawAudienceSnapshot, RawComment, RawContent, RawMetricDaily } from "../PlatformAdapter";
 
+/** The demo story only uses the original lifestyle types/categories (music etc. exist for real data). */
+type DemoType = Extract<ContentType, "review" | "tutorial" | "vlog" | "bts">;
+type DemoCategory = Extract<ProductCategory, "skincare" | "tech" | "food" | "home" | "fashion">;
+
 export interface SponsoredSlot {
   dealId: number;
   brandName: string;
@@ -46,8 +50,8 @@ const P: Record<
     saveRate: number;
     profileRate: number;
     commentRate: number;
-    viewMult: Record<ContentType, number>;
-    followersPer1k: Record<ContentType, number>;
+    viewMult: Record<DemoType, number>;
+    followersPer1k: Record<DemoType, number>;
     baseFollowers: number;
     monthlyGrowthBefore: number;
     hours: [number, number];
@@ -100,14 +104,14 @@ const P: Record<
   },
 };
 
-const TYPE_WEIGHTS: Record<PlatformId, Record<ContentType, number>> = {
+const TYPE_WEIGHTS: Record<PlatformId, Record<DemoType, number>> = {
   tiktok: { review: 40, tutorial: 25, vlog: 20, bts: 15 },
   instagram: { review: 30, tutorial: 20, vlog: 30, bts: 20 },
   youtube: { review: 50, tutorial: 25, vlog: 20, bts: 5 },
 };
-const CATEGORY_WEIGHTS: Record<ProductCategory, number> = { skincare: 28, tech: 24, food: 20, home: 16, fashion: 12 };
+const CATEGORY_WEIGHTS: Record<DemoCategory, number> = { skincare: 28, tech: 24, food: 20, home: 16, fashion: 12 };
 
-const PRODUCTS: Record<ProductCategory, string[]> = {
+const PRODUCTS: Record<DemoCategory, string[]> = {
   skincare: ["เซรั่ม", "กันแดด", "คลีนซิ่ง", "มอยส์เจอไรเซอร์"],
   tech: ["หูฟัง", "พาวเวอร์แบงค์", "กล้องแอคชั่น", "คีย์บอร์ด"],
   food: ["กาแฟดริป", "กราโนล่า", "ซอสพริก", "ขนมคลีน"],
@@ -115,7 +119,7 @@ const PRODUCTS: Record<ProductCategory, string[]> = {
   fashion: ["กระเป๋าผ้า", "รองเท้าผ้าใบ", "เสื้อลินิน", "แว่นกันแดด"],
 };
 
-const TITLES: Record<ContentType, string[]> = {
+const TITLES: Record<DemoType, string[]> = {
   review: ["รีวิว{p} ใช้จริง 2 สัปดาห์", "{p} ราคาไม่ถึงพัน คุ้มไหม?", "เทียบ{p} 3 แบรนด์", "{p}ที่ใช้ซ้ำมาทั้งปี"],
   tutorial: ["วิธีเลือก{p}ให้เหมาะกับคุณ", "ฮาวทูใช้{p}ให้คุ้ม", "5 ทริค{p}ที่ไม่มีใครบอก", "มือใหม่เริ่มใช้{p}ยังไงดี"],
   vlog: ["1 วันของครีเอเตอร์ + {p}ที่ใช้ทุกวัน", "Weekend vlog ช้อป{p}", "ทำงานที่บ้านกับ{p}ตัวใหม่", "Vlog จัดของ ได้{p}มาเพียบ"],
@@ -175,7 +179,7 @@ const COMMENT_TEMPLATES: Record<CommentCategory, string[]> = {
   ],
 };
 
-const CATEGORY_PQ: Record<ProductCategory, string[]> = {
+const CATEGORY_PQ: Record<DemoCategory, string[]> = {
   skincare: ["ใช้กับผิวแพ้ง่ายได้ไหมคะ", "ผิวมันใช้กับ{p}ตัวนี้ได้มั้ยคะ"],
   tech: ["แบตอยู่ได้กี่ชั่วโมงครับ", "ประกันศูนย์ไหมครับ", "ใช้กับ iPhone ได้ไหมครับ", "{p}รุ่นไหนดีกว่ากันครับ"],
   food: ["สั่งซื้อยังไงคะ", "ส่งต่างประเทศไหมคะ"],
@@ -236,11 +240,11 @@ export function generateMockData(opts: GenerateOptions): Record<PlatformId, Plat
     return `${day}T${String(rng.int(h0, h1)).padStart(2, "0")}:${String(rng.pick([0, 15, 30, 45])).padStart(2, "0")}:00`;
   };
   const makePost = (p: PlatformId, day: string, type: ContentType, cat: ProductCategory, sponsoredSlot?: SponsoredSlot) => {
-    const product = rng.pick(PRODUCTS[cat]);
+    const product = rng.pick(PRODUCTS[cat as DemoCategory]);
     const title = sponsoredSlot
       ? `${sponsoredSlot.brandName} × ${sponsoredSlot.dealTitle}${type === "tutorial" ? " (ฮาวทู)" : ""}`
-      : rng.pick(TITLES[type]).replace("{p}", product);
-    const mult = P[p].viewMult[type] * (sponsoredSlot ? 0.92 : 1) * (sponsoredSlot?.dedicated ? 1.15 : 1);
+      : rng.pick(TITLES[type as DemoType]).replace("{p}", product);
+    const mult = P[p].viewMult[type as DemoType] * (sponsoredSlot ? 0.92 : 1) * (sponsoredSlot?.dedicated ? 1.15 : 1);
     posts.push({
       platform: p,
       totalViews: Math.round(rng.lognormal(P[p].medianViews * mult, 0.55)),
@@ -293,7 +297,7 @@ export function generateMockData(opts: GenerateOptions): Record<PlatformId, Plat
     const weights = Array.from({ length: horizon }, (_, k) => Math.pow(cfg.decay, k) + 0.002);
     const wSum = weights.reduce((a, b) => a + b, 0);
     const saveMult = c.type === "tutorial" ? 2 : 1;
-    const fpk = cfg.followersPer1k[c.type] * (c.isSponsored ? 0.85 : 1);
+    const fpk = cfg.followersPer1k[c.type as DemoType] * (c.isSponsored ? 0.85 : 1);
     const jitter = () => rng.float(0.85, 1.15);
 
     const viewsByDay = days.map((_, k) => Math.round((post.totalViews * weights[k]) / wSum));
@@ -319,8 +323,8 @@ export function generateMockData(opts: GenerateOptions): Record<PlatformId, Plat
         };
         const cat = rng.weighted(weights);
         let tmpl = rng.pick(COMMENT_TEMPLATES[cat]);
-        if (cat === "product_question" && rng.chance(0.4)) tmpl = rng.pick(CATEGORY_PQ[c.productCategory]);
-        const text = tmpl.replace("{p}", rng.pick(PRODUCTS[c.productCategory]));
+        if (cat === "product_question" && rng.chance(0.4)) tmpl = rng.pick(CATEGORY_PQ[c.productCategory as DemoCategory]);
+        const text = tmpl.replace("{p}", rng.pick(PRODUCTS[c.productCategory as DemoCategory]));
         const hh = String(rng.int(day === storyDate ? 0 : 7, day === storyDate ? 9 : 23)).padStart(2, "0");
         const mm = String(rng.int(0, 59)).padStart(2, "0");
         const ss = String(rng.int(0, 59)).padStart(2, "0");

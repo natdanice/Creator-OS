@@ -1,6 +1,6 @@
 import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
 import type { DB } from "@/db/client";
-import { comments, contentMetricsDaily, contents, platforms, tasks } from "@/db/schema";
+import { accountDaily, comments, contentMetricsDaily, contents, platforms, tasks } from "@/db/schema";
 import { ANALYTICS_OK } from "@/cdp/consent";
 import { productQuestionSpikes } from "@/cdp/segments";
 import { engagementRate } from "@/crm/rules";
@@ -15,7 +15,28 @@ export interface Kpi {
   byPlatform: Record<PlatformKey, number>;
 }
 
+/** Per-platform totals. Where account-level daily data exists (e.g. TikTok Studio overview), it wins over summed posts. */
 function metricTotals(db: DB, start: string, end: string) {
+  const fromPosts = postTotals(db, start, end);
+  const acct = db
+    .select({
+      platformId: accountDaily.platformId,
+      views: sql<number>`coalesce(sum(${accountDaily.views}), 0)`,
+      likes: sql<number>`coalesce(sum(${accountDaily.likes}), 0)`,
+      comments: sql<number>`coalesce(sum(${accountDaily.comments}), 0)`,
+      shares: sql<number>`coalesce(sum(${accountDaily.shares}), 0)`,
+      newFollowers: sql<number>`coalesce(sum(${accountDaily.newFollowers}), 0)`,
+    })
+    .from(accountDaily)
+    .where(and(gte(accountDaily.date, start), lte(accountDaily.date, end)))
+    .groupBy(accountDaily.platformId)
+    .all();
+  const out = fromPosts.filter((r) => !acct.some((a) => a.platformId === r.platformId));
+  for (const a of acct) out.push({ ...a, saves: fromPosts.find((r) => r.platformId === a.platformId)?.saves ?? 0 });
+  return out;
+}
+
+function postTotals(db: DB, start: string, end: string) {
   return db
     .select({
       platformId: contents.platformId,
@@ -78,9 +99,16 @@ export function overviewData(db: DB, today: string, range: number) {
     .where(and(gte(contentMetricsDaily.date, start), lte(contentMetricsDaily.date, end)))
     .groupBy(contentMetricsDaily.date, contents.platformId)
     .all();
+  const acctDaily = db
+    .select({ date: accountDaily.date, platformId: accountDaily.platformId, views: accountDaily.views })
+    .from(accountDaily)
+    .where(and(gte(accountDaily.date, start), lte(accountDaily.date, end)))
+    .all();
+  const acctPlatforms = new Set(acctDaily.map((r) => r.platformId));
   const series = daysBetween(start, end).map((date) => {
     const row: Record<string, number | string> = { date };
-    for (const p of PLATFORM_KEYS) row[p] = daily.find((d) => d.date === date && d.platformId === p)?.views ?? 0;
+    for (const p of PLATFORM_KEYS)
+      row[p] = (acctPlatforms.has(p) ? acctDaily.find((d) => d.date === date && d.platformId === p) : daily.find((d) => d.date === date && d.platformId === p))?.views ?? 0;
     return row as { date: string } & Record<PlatformKey, number>;
   });
 
@@ -153,7 +181,7 @@ export function insightData(db: DB, start: string, end: string) {
     const followers = mine.reduce((s, r) => s + r.followers, 0);
     const avg = views ? (followers / views) * 1000 : 0;
     const types = mine
-      .filter((r) => r.posts >= 3 && r.views > 0)
+      .filter((r) => r.posts >= 3 && r.views > 0 && r.followers > 0) // no per-post follower data → no claim
       .map((r) => ({ type: r.type, posts: r.posts, fpk: (r.followers / r.views) * 1000 }))
       .sort((a, b) => b.fpk - a.fpk);
     const best = types[0];

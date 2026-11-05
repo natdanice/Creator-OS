@@ -56,7 +56,12 @@ connected accounts. The two never share a database.
    `CRON_SECRET`). Leave `APP_MODE` out so `npm run dev` keeps opening the demo.
 2. `npm run setup:live` creates the empty live database (it refuses to overwrite an existing one).
 3. `npm run dev:live` → sign in → **Settings**: set your rate card, then **Brands → Add brand**.
-4. Connect accounts in **Settings → Connected accounts**. Each needs a developer app on that
+4. Bring in what you already have: **Settings → Import your workbook (.xlsx)** reads your own Excel
+   files (sheets named `TikTok_Clips`, `IG_Posts`, `TikTok_Daily`, `TikTok_Followers_Daily`,
+   `TikTok_Follower_Gender/_Territories`, `IG_Audience_AgeGender/_Countries`; or
+   `npm run import:workbook -- files…`). Per-post sheets hold lifetime totals, recorded on the posting
+   day; `TikTok_Daily` feeds the Overview's daily chart. **Import brands & deals** takes the CSV template.
+5. Connect accounts in **Settings → Connected accounts**. Each needs a developer app on that
    platform; put its id/secret in `.env.local` and register the redirect URL shown in Settings.
 
 | Account | What comes in | Notes |

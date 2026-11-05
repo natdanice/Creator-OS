@@ -383,9 +383,16 @@ export async function saveProfileAction(formData: FormData) {
   const db = getDb();
   setSetting(db, "creator_name", String(formData.get("name") ?? "").trim());
   setSetting(db, "creator_tagline", String(formData.get("tagline") ?? "").trim());
+  const { audienceSnapshots } = await import("@/db/schema");
   for (const p of ["tiktok", "instagram", "youtube"]) {
     const handle = String(formData.get(`handle_${p}`) ?? "").trim();
     db.update(platforms).set({ handle: handle || "—" }).where(eq(platforms.id, p)).run();
+    // A typed follower count goes on the platform's latest snapshot (or this month's, if none yet).
+    const followers = Math.round(Number(String(formData.get(`followers_${p}`) ?? "").replace(/[^\d]/g, "")));
+    if (!followers) continue;
+    const latest = db.select().from(audienceSnapshots).where(eq(audienceSnapshots.platformId, p)).orderBy(sql`${audienceSnapshots.month} desc`).get();
+    if (latest) db.update(audienceSnapshots).set({ followers }).where(eq(audienceSnapshots.id, latest.id)).run();
+    else db.insert(audienceSnapshots).values({ platformId: p, month: getStoryDate(db).slice(0, 7), followers }).run();
   }
   revalidateAll();
 }
@@ -404,6 +411,33 @@ export async function importCrmAction(_prev: ImportState | null, formData: FormD
   } catch (e) {
     return { ok: false, message: fmt(t.settings.importFail, { message: e instanceof Error ? e.message : String(e) }) };
   }
+}
+
+export async function importWorkbookAction(_prev: ImportState | null, formData: FormData): Promise<ImportState> {
+  const { importWorkbook } = await import("@/cdp/adapters/workbook/importWorkbook");
+  const { t } = await getI18n();
+  const files = formData.getAll("files").filter((f): f is File => f instanceof File && f.size > 0);
+  if (!files.length) return { ok: false, message: t.workbook.files };
+  const db = getDb();
+  const now = stamp(getStoryDate(db));
+  let posts = 0,
+    days = 0,
+    months = 0;
+  const brandsAdded: string[] = [];
+  try {
+    for (const f of files) {
+      const r = await importWorkbook(db, await f.arrayBuffer(), now);
+      posts += Object.values(r.posts).reduce((a, b) => a + (b ?? 0), 0);
+      days += r.accountDays;
+      months += r.audienceMonths;
+      brandsAdded.push(...r.brandsAdded);
+    }
+  } catch (e) {
+    return { ok: false, message: fmt(t.settings.importFail, { message: e instanceof Error ? e.message : String(e) }) };
+  }
+  revalidateAll();
+  const msg = fmt(t.workbook.done, { posts, days, months });
+  return { ok: true, message: brandsAdded.length ? `${msg} · ${fmt(t.workbook.brands, { list: brandsAdded.join(", ") })}` : msg };
 }
 
 /* ───────── Finance ───────── */
@@ -490,7 +524,8 @@ export async function importCsvAction(_prev: ImportState | null, formData: FormD
   const platform = String(formData.get("platform")) as PlatformId;
   const metrics = formData.get("metrics");
   const comments = formData.get("comments");
-  if (!(metrics instanceof File) || metrics.size === 0) return { ok: false, message: fmt(t.settings.importFail, { message: t.settings.metricsCsv }) };
+  if (!(metrics instanceof File) || metrics.size === 0) return { ok: false, message: t.settings.chooseFileFirst };
+  if (/\.xlsx?$/i.test(metrics.name)) return { ok: false, message: t.settings.excelHint };
   const commentsText = comments instanceof File && comments.size > 0 ? await comments.text() : undefined;
   return runCsvImport(platform, await metrics.text(), commentsText);
 }

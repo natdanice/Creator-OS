@@ -1,7 +1,7 @@
 "use client";
 import { useActionState, useTransition } from "react";
 import { FileUp, RotateCcw } from "lucide-react";
-import { importCrmAction, importCsvAction, importSampleAction, resetDemoAction, type ImportState } from "@/app/actions";
+import { importCrmAction, importCsvAction, importSampleAction, importWorkbookAction, resetDemoAction, type ImportState } from "@/app/actions";
 import { btn } from "@/components/ui";
 import { useI18n } from "@/lib/i18n/client";
 
@@ -45,6 +45,23 @@ export function CsvImportForm({ platform }: { platform: string }) {
       )}
       <Result state={state ?? sampleState} />
     </div>
+  );
+}
+
+export function WorkbookImportForm() {
+  const { t } = useI18n();
+  const [state, upload, uploading] = useActionState(importWorkbookAction, null);
+  return (
+    <form action={upload} className="space-y-3">
+      <label className="block text-xs text-muted">
+        {t.workbook.files}
+        <input id="workbook-files" type="file" name="files" multiple required accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" className="mt-1 block w-full text-xs file:mr-2 file:rounded-md file:border file:border-line file:bg-white file:px-2 file:py-1" />
+      </label>
+      <button className={btn.primary} disabled={uploading}>
+        <FileUp size={14} aria-hidden /> {uploading ? "…" : t.workbook.import}
+      </button>
+      <Result state={state} />
+    </form>
   );
 }
 

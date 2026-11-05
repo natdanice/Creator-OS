@@ -176,6 +176,19 @@ export function availableMonths(db: DB, today: string) {
   return [...new Set(db.select({ m: audienceSnapshots.month }).from(audienceSnapshots).where(lte(audienceSnapshots.month, monthOf(today))).all().map((r) => r.m))].sort().reverse();
 }
 
+/** The latest month ≤ `month` that has a demographic split for `platform` (imports often give a split only for one month). */
+export function latestSplitMonth(db: DB, platform: string, month: string): string | null {
+  return (
+    db
+      .select({ month: audienceSnapshots.month })
+      .from(audienceSnapshots)
+      .innerJoin(audienceBreakdown, eq(audienceBreakdown.snapshotId, audienceSnapshots.id))
+      .where(and(eq(audienceSnapshots.platformId, platform), lte(audienceSnapshots.month, month)))
+      .orderBy(desc(audienceSnapshots.month))
+      .get()?.month ?? null
+  );
+}
+
 /** Demographic split of one month, per platform. */
 export function demographics(db: DB, month: string) {
   const snaps = db.select().from(audienceSnapshots).where(eq(audienceSnapshots.month, month)).all();

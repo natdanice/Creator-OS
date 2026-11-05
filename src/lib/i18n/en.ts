@@ -36,8 +36,8 @@ export const en: Dict = {
   },
   navTabs: { overview: "Today", inbox: "Inbox", content: "Post", brands: "Brands" },
   platforms: { tiktok: "TikTok", instagram: "Instagram", youtube: "YouTube", all: "All platforms" },
-  contentTypes: { review: "Review", tutorial: "Tutorial", vlog: "Vlog", bts: "Behind the scenes" },
-  categories: { skincare: "Skincare", tech: "Tech", food: "Food", home: "Home", fashion: "Fashion" },
+  contentTypes: { review: "Review", tutorial: "Tutorial", vlog: "Vlog", bts: "Behind the scenes", cover: "Cover", reply: "Reply", lifestyle: "Lifestyle" },
+  categories: { skincare: "Skincare", tech: "Tech", food: "Food", home: "Home", fashion: "Fashion", music: "Music" },
   commentCategories: {
     product_question: "Product question",
     content_request: "Content request",
@@ -457,6 +457,8 @@ export const en: Dict = {
     import: "Import",
     loadSample: "Import sample files",
     csvColumns: "Required columns",
+    chooseFileFirst: "Choose a CSV file first, then click Import",
+    excelHint: "This is an Excel file. Use “Import your workbook (.xlsx)” above instead",
     importOk: "Imported {platform}: {contents} posts · {metrics} metric rows · {comments} comments",
     importFail: "Import failed: {message}",
     pipeline: "How data flows through the CDP",
@@ -553,6 +555,7 @@ export const en: Dict = {
     country: "Country",
     genders: { female: "Women", male: "Men", other: "Other" },
     countries: { TH: "Thailand", LA: "Laos", MY: "Malaysia", US: "United States", other: "Other" },
+    splitFrom: "Latest available split: {month}",
     segments: "Segments",
     segmentsHint: "From consented comments in the last {days} days · {active} active people · {spam} spam accounts left out",
     segs: {
@@ -754,6 +757,7 @@ export const en: Dict = {
     tagline: "Media kit tagline",
     taglinePh: "e.g. Honest skincare & gadget reviews",
     handles: "Handles",
+    followers: "{platform} followers now (if your files don’t include it)",
     save: "Save profile",
   },
   crmImport: {
@@ -764,6 +768,14 @@ export const en: Dict = {
     import: "Import",
     done: "{brands} new brands · {deals} deals · {invoices} invoices · {skipped} already there",
     columns: "Columns: brand, category (skincare/tech/food/home/fashion), contact, stage (lead … paid), value, deliverables (rate-card codes like TT_VIDEO+IG_REEL), dates as YYYY-MM-DD",
+  },
+  workbook: {
+    title: "Import your workbook (.xlsx)",
+    hint: "Your own Excel files: sheets named TikTok_Clips, IG_Posts, TikTok_Daily, TikTok_Followers_Daily and the audience sheets are recognised automatically. Choose several files at once; importing again updates the numbers.",
+    files: "Excel files",
+    import: "Import workbook",
+    done: "{posts} posts · {days} days of account data · {months} audience months",
+    brands: "New brands from tagged Product posts: {list}",
   },
   mediaKit: {
     title: "Media kit",

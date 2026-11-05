@@ -29,6 +29,13 @@
       "when": 1793855535904,
       "tag": "0003_connections",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1793877837901,
+      "tag": "0004_account_daily",
+      "breakpoints": true
     }
   ]
 }

@@ -2,7 +2,7 @@ import Link from "next/link";
 import { FileText, ShieldCheck, X } from "lucide-react";
 import { getDb } from "@/db/client";
 import type { ProductCategory } from "@/db/schema";
-import { audienceProfile, audienceSegments, availableMonths, demographics, followerSeries, segmentMembers, SEGMENT_WINDOW_DAYS, SUPERFAN_MIN_COMMENTS, type SegmentId } from "@/cdp/profiles";
+import { audienceProfile, audienceSegments, availableMonths, demographics, followerSeries, latestSplitMonth, segmentMembers, SEGMENT_WINDOW_DAYS, SUPERFAN_MIN_COMMENTS, type SegmentId } from "@/cdp/profiles";
 import { productQuestionSpikes } from "@/cdp/segments";
 import { PLATFORM_KEYS, type PlatformKey } from "@/lib/queries/overview";
 import { getStoryDate } from "@/lib/queries/settings";
@@ -40,7 +40,9 @@ export default async function AudiencePage({ searchParams }: { searchParams: Pro
   const series = followerSeries(db, today);
   const last = series.at(-1);
   const yearAgo = series.at(-13);
-  const demo = demographics(db, month).find((d) => d.platformId === platform);
+  // If the chosen month has no split for this platform, show the latest month that does (and say which).
+  const splitMonth = month ? latestSplitMonth(db, platform, month) : null;
+  const demo = splitMonth ? demographics(db, splitMonth).find((d) => d.platformId === platform) : undefined;
   const seg = audienceSegments(db, today);
   const spikes = new Set(productQuestionSpikes(db, today).filter((s) => s.isSpike).map((s) => `askers_${s.category}`));
   const segmentIds = seg.summaries.map((s) => s.id);
@@ -108,6 +110,7 @@ export default async function AudiencePage({ searchParams }: { searchParams: Pro
           </div>
           {demo ? (
             <div className="space-y-5">
+              {splitMonth !== month && <p className="text-xs text-muted">{fmt(t.audience.splitFrom, { month: splitMonth! })}</p>}
               <DemoGroup title={t.audience.age} rows={demo.age.map((a) => ({ label: a.bucket, pct: a.pct }))} color={color} />
               <DemoGroup title={t.audience.gender} rows={demo.gender.map((g) => ({ label: t.audience.genders[g.bucket as "female"] ?? g.bucket, pct: g.pct }))} color={color} />
               <DemoGroup title={t.audience.country} rows={demo.country.map((c) => ({ label: (t.audience.countries as Record<string, string>)[c.bucket] ?? c.bucket, pct: c.pct }))} color={color} />
@@ -190,6 +193,7 @@ export default async function AudiencePage({ searchParams }: { searchParams: Pro
 }
 
 function DemoGroup({ title, rows, color }: { title: string; rows: { label: string; pct: number }[]; color: string }) {
+  if (rows.length === 0) return null; // e.g. TikTok exports have no age split
   const max = Math.max(...rows.map((r) => r.pct), 1);
   return (
     <div>
