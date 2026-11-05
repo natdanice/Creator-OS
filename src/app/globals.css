@@ -32,7 +32,7 @@
 
 html,
 body {
-  background: var(--color-paper);
+  background: var(--color-card);
   color: var(--color-ink);
 }
 

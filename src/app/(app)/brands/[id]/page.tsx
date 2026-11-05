@@ -12,7 +12,7 @@ import { computeBrandStats } from "@/crm/brandStats";
 import { contentPerformance, sponsoredContentIdsForDeals } from "@/crm/contentPerformance";
 import { recommendNextOffer } from "@/crm/nextOffer";
 import { getStoryDate } from "@/lib/queries/settings";
-import { ButtonLink, Card, PageHeader, Pill, PlatformTag, TierBadge } from "@/components/ui";
+import { ButtonLink, Card, PageHeader, Pill, PlatformTag, StatStrip, StatTile, TierBadge } from "@/components/ui";
 import { baht, num, pct } from "@/lib/format";
 import { diffDays } from "@/lib/dates";
 import { fmt } from "@/lib/i18n";
@@ -60,16 +60,13 @@ export default async function Brand360({ params }: { params: Promise<{ id: strin
       />
       {s.brand.notes && <p className="-mt-3 mb-5 text-sm text-ink-2">📝 {s.brand.notes}</p>}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+      <StatStrip cols={5}>
         {kpis.map((k) => (
-          <div key={k.label} className="rounded-xl border border-line bg-card p-4">
-            <div className="text-xs text-muted">{k.label}</div>
-            <div className="tabular mt-1 font-heading text-xl font-semibold">{k.value}</div>
-          </div>
+          <StatTile key={k.label} label={k.label} value={k.value} size="md" />
         ))}
-      </div>
+      </StatStrip>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card
           className="border-accent/40 xl:col-span-1"
           title={

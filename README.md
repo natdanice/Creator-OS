@@ -22,9 +22,16 @@ Requirements: Node 22+ (tested on Node 24.19, macOS). The SQLite driver ships pr
 |---|---|
 | `npm run seed` | Rebuilds `data/creator-os.db` from scratch with the seeded story (deterministic) |
 | `npm run dev` | Starts the app |
+| `npm run start:demo` | Production start that reseeds first (used by Render) |
 | `npm run verify` | Checks the story on a temp copy of the DB: tiers, silent brands, spike, the exact automation tasks for the story date, inbox briefs, finance figures, audience segments and Ask AI answers |
 | `npm run typecheck` | TypeScript check |
 | `npm run db:generate` | Regenerate the SQL migration after editing `src/db/schema.ts` |
+
+**Put the demo online (free, Render):** the repo includes `render.yaml`. On render.com choose
+*New → Blueprint*, pick this GitHub repository and deploy. The free plan has no permanent disk, so
+`npm run start:demo` rebuilds the demo database on every start; anything changed in the app resets
+when the service sleeps (after ~15 minutes idle) or redeploys. The first visit after sleeping takes
+about a minute. Report links in drafted messages use Render's public URL automatically.
 
 **Language:** the UI is English by default; the **EN → ภาษาไทย** button in the sidebar switches every
 screen (stored in a `locale` cookie). Mock *data* stays Thai on purpose (fan comments, post titles,

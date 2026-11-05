@@ -11,4 +11,5 @@ export const HISTORY_DAYS = 120;
 export const CURRENCY = "THB";
 
 /** Base URL used inside drafted messages (e.g. report links). */
-export const APP_URL = process.env.APP_URL ?? "http://localhost:3000";
+// On Render, RENDER_EXTERNAL_URL is set automatically to the public address.
+export const APP_URL = process.env.APP_URL ?? process.env.RENDER_EXTERNAL_URL ?? "http://localhost:3000";

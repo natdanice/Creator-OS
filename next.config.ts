@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   serverExternalPackages: ["better-sqlite3"],
   // Keep `next dev` from writing an AGENTS.md into the repo.
   agentRules: false,
+  // The dev-only badge would sit on the phone tab bar.
+  devIndicators: { position: "top-right" },
 };
 
 export default nextConfig;

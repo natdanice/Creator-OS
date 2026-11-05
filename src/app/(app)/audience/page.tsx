@@ -6,7 +6,7 @@ import { audienceProfile, audienceSegments, availableMonths, demographics, follo
 import { productQuestionSpikes } from "@/cdp/segments";
 import { PLATFORM_KEYS, type PlatformKey } from "@/lib/queries/overview";
 import { getStoryDate } from "@/lib/queries/settings";
-import { ButtonLink, Card, PageHeader, Pill, PlatformTag, ShareBar, StatTile } from "@/components/ui";
+import { ButtonLink, Card, PageHeader, Pill, PlatformTag, ShareBar, StatStrip, StatTile } from "@/components/ui";
 import { FollowerGrowthChart } from "@/components/charts/FollowerGrowthChart";
 import { num, signedPct } from "@/lib/format";
 import { fmt, type Dict, type I18n } from "@/lib/i18n";
@@ -71,14 +71,14 @@ export default async function AudiencePage({ searchParams }: { searchParams: Pro
 
       {params.member && <ProfileCard i18n={i18n} profile={profile} closeHref={href({ member: undefined })} />}
 
-      <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
+      <StatStrip>
         <StatTile label={t.audience.total} value={num(total)} sub={growth(total, totalYearAgo)} />
         {PLATFORM_KEYS.map((p) => (
           <StatTile key={p} label={t.platforms[p]} value={num(last?.[p] ?? 0)} sub={growth(last?.[p] ?? 0, yearAgo?.[p] ?? 0)} />
         ))}
-      </div>
+      </StatStrip>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card title={t.audience.growthChart} hint={t.audience.growthHint} className="xl:col-span-2">
           <FollowerGrowthChart data={series} />
         </Card>

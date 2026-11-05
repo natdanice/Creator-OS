@@ -1,71 +1,144 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useTransition } from "react";
-import { Bot, Building2, Inbox, Languages, LayoutDashboard, Send, Settings, Sparkles, Users, Wallet } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { Bot, Building2, Inbox, Languages, LayoutDashboard, Menu, Send, Settings, Sparkles, Users, Wallet, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { setLocaleAction } from "@/app/actions";
 
+type Item = { href: string; label: string; icon: typeof Bot; badge?: number };
+
+/** Desktop: light cream sidebar. Phone: a bottom tab bar (5 items) with the rest under "More". */
 export function Sidebar({ storyDate, inboxUnread }: { storyDate: string; inboxUnread: number }) {
   const { t, locale } = useI18n();
   const [switching, start] = useTransition();
-  const ITEMS = [
-    { href: "/", label: t.nav.overview, icon: LayoutDashboard },
-    { href: "/content", label: t.nav.content, icon: Send },
-    { href: "/inbox", label: t.nav.inbox, icon: Inbox, badge: inboxUnread },
-    { href: "/audience", label: t.nav.audience, icon: Users },
-    { href: "/brands", label: t.nav.brands, icon: Building2 },
-    { href: "/automation", label: t.nav.automation, icon: Bot },
-    { href: "/finance", label: t.nav.finance, icon: Wallet },
-    { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles },
-  ];
+  const [moreOpen, setMoreOpen] = useState(false);
   const path = usePathname();
+  useEffect(() => setMoreOpen(false), [path]);
+
+  const overview: Item = { href: "/", label: t.nav.overview, icon: LayoutDashboard };
+  const publisher: Item = { href: "/content", label: t.nav.content, icon: Send };
+  const inbox: Item = { href: "/inbox", label: t.nav.inbox, icon: Inbox, badge: inboxUnread };
+  const audience: Item = { href: "/audience", label: t.nav.audience, icon: Users };
+  const brands: Item = { href: "/brands", label: t.nav.brands, icon: Building2 };
+  const automation: Item = { href: "/automation", label: t.nav.automation, icon: Bot };
+  const finance: Item = { href: "/finance", label: t.nav.finance, icon: Wallet };
+  const askAi: Item = { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles };
+  const settings: Item = { href: "/settings", label: t.nav.settings, icon: Settings };
+  const ITEMS = [overview, publisher, inbox, audience, brands, automation, finance, askAi];
+  // Phone tabs use short labels so Thai names fit.
+  const TABS: Item[] = [
+    { ...overview, label: t.navTabs.overview },
+    { ...inbox, label: t.navTabs.inbox },
+    { ...publisher, label: t.navTabs.content },
+    { ...brands, label: t.navTabs.brands },
+  ];
+  const MORE = [audience, automation, finance, askAi, settings];
+
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
-  const item = (it: { href: string; label: string; icon: typeof Bot; badge?: number }) => {
+  const badge = (n?: number) => (n ? <span className="tabular rounded-full bg-accent px-1.5 text-[11px] font-medium leading-[18px] text-white">{n}</span> : null);
+
+  const langButton = (
+    <button
+      onClick={() => start(() => setLocaleAction(locale === "en" ? "th" : "en"))}
+      disabled={switching}
+      aria-label={t.lang.label}
+      className="flex w-fit items-center gap-2 rounded-lg border border-line bg-white px-3 py-1.5 text-xs text-ink-2 hover:text-ink disabled:opacity-50"
+    >
+      <Languages size={14} aria-hidden />
+      <span className="font-medium">{locale.toUpperCase()}</span>
+      <span className="text-subtle">→</span>
+      {t.lang.switchTo}
+    </button>
+  );
+
+  const sideLink = (it: Item) => {
     const Icon = it.icon;
     const on = active(it.href);
     return (
       <Link
         key={it.href}
         href={it.href}
-        className={`group flex shrink-0 items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${
-          on ? "bg-white/10 text-white" : "text-white/65 hover:bg-white/5 hover:text-white"
-        }`}
+        aria-current={on ? "page" : undefined}
+        className={`flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors ${on ? "bg-white font-medium text-ink shadow-[inset_3px_0_0_var(--color-accent)]" : "text-ink-2 hover:bg-white/60 hover:text-ink"}`}
       >
-        <Icon size={18} className={on ? "text-accent" : ""} aria-hidden />
+        <Icon size={18} className={on ? "text-accent-strong" : "text-muted"} aria-hidden />
         <span className="whitespace-nowrap">{it.label}</span>
-        {!!it.badge && <span className="tabular ml-auto rounded-full bg-accent px-1.5 text-[11px] font-medium text-white">{it.badge}</span>}
+        <span className="ml-auto">{badge(it.badge)}</span>
       </Link>
     );
   };
+
   return (
-    <aside className="no-print sticky top-0 z-20 flex w-full flex-col bg-ink text-white md:h-screen md:w-60 md:shrink-0">
-      <div className="flex items-center gap-2 px-4 py-4 md:px-5 md:py-6">
-        <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent font-heading text-base font-semibold text-ink">C</div>
-        <div>
-          <div className="font-heading text-lg leading-none">{t.app.name}</div>
-          <div className="mt-1 text-[11px] text-white/50">{t.app.tagline}</div>
+    <>
+      {/* Desktop sidebar */}
+      <aside className="no-print sticky top-0 hidden h-screen w-60 shrink-0 flex-col border-r border-line bg-paper md:flex">
+        <div className="flex items-center gap-2.5 px-5 py-6">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent font-heading text-base font-semibold text-white">C</div>
+          <div>
+            <div className="font-heading text-lg leading-none text-ink">{t.app.name}</div>
+            <div className="mt-1 text-[11px] text-muted">{t.app.tagline}</div>
+          </div>
         </div>
+        <nav className="flex flex-1 flex-col gap-0.5 px-3">
+          {ITEMS.map(sideLink)}
+          <div className="mt-auto border-t border-line pt-2">{sideLink(settings)}</div>
+        </nav>
+        <div className="space-y-3 px-5 py-4">
+          {langButton}
+          <div className="text-[11px] text-muted">
+            {t.app.today}
+            <div className="tabular mt-0.5 text-sm text-ink">{storyDate}</div>
+          </div>
+        </div>
+      </aside>
+
+      {/* Phone: small top bar */}
+      <div className="no-print flex items-center justify-between px-4 pt-4 md:hidden">
+        <div className="flex items-center gap-2">
+          <div className="grid h-7 w-7 place-items-center rounded-lg bg-accent font-heading text-sm font-semibold text-white">C</div>
+          <span className="font-heading text-base">{t.app.name}</span>
+        </div>
+        <span className="tabular text-xs text-muted">{storyDate}</span>
       </div>
-      <nav className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:overflow-visible md:pb-0">
-        {ITEMS.map(item)}
-        <div className="md:mt-auto md:border-t md:border-white/10 md:pt-2">{item({ href: "/settings", label: t.nav.settings, icon: Settings })}</div>
-      </nav>
-      <button
-        onClick={() => start(() => setLocaleAction(locale === "en" ? "th" : "en"))}
-        disabled={switching}
-        aria-label={t.lang.label}
-        className="mx-3 mb-3 flex w-fit items-center gap-2 md:mb-1 rounded-lg border border-white/15 px-3 py-1.5 text-xs text-white/75 hover:bg-white/5 hover:text-white disabled:opacity-50"
+
+      {/* Phone: "More" sheet */}
+      {moreOpen && (
+        <div className="no-print fixed inset-0 z-30 md:hidden" role="dialog" aria-modal="true" aria-label={t.nav.more}>
+          <button className="absolute inset-0 bg-ink/30" aria-label={t.audience.close} onClick={() => setMoreOpen(false)} />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-2xl bg-paper px-4 pt-4" style={{ paddingBottom: "calc(76px + env(safe-area-inset-bottom, 0px))" }}>
+            <div className="grid gap-0.5">{MORE.map(sideLink)}</div>
+            <div className="mt-4 flex items-center justify-between gap-3 border-t border-line pt-4">
+              {langButton}
+              <span className="text-[11px] text-muted">
+                {t.app.today} <span className="tabular text-ink">{storyDate}</span>
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Phone: bottom tab bar */}
+      <nav
+        className="no-print fixed inset-x-0 bottom-0 z-40 grid grid-cols-5 border-t border-line bg-white md:hidden"
+        style={{ paddingBottom: "env(safe-area-inset-bottom, 0px)", paddingLeft: "env(safe-area-inset-left, 0px)", paddingRight: "env(safe-area-inset-right, 0px)" }}
       >
-        <Languages size={14} aria-hidden />
-        <span className="font-medium">{locale.toUpperCase()}</span>
-        <span className="text-white/40">→</span>
-        {t.lang.switchTo}
-      </button>
-      <div className="hidden px-5 py-4 text-[11px] text-white/45 md:block">
-        {t.app.today}
-        <div className="tabular mt-0.5 text-sm text-white/80">{storyDate}</div>
-      </div>
-    </aside>
+        {TABS.map((it) => {
+          const Icon = it.icon;
+          const on = active(it.href) && !moreOpen;
+          return (
+            <Link key={it.href} href={it.href} aria-current={on ? "page" : undefined} className={`relative flex flex-col items-center gap-0.5 py-2 text-[10.5px] ${on ? "font-medium text-accent-strong" : "text-muted"}`}>
+              <Icon size={20} aria-hidden />
+              <span className="max-w-full truncate px-1">{it.label}</span>
+              {!!it.badge && <span className="tabular absolute left-1/2 top-1 ml-2 rounded-full bg-accent px-1 text-[10px] leading-4 text-white">{it.badge}</span>}
+            </Link>
+          );
+        })}
+        <button onClick={() => setMoreOpen((v) => !v)} aria-expanded={moreOpen} className={`flex flex-col items-center gap-0.5 py-2 text-[10.5px] ${moreOpen || MORE.some((m) => active(m.href)) ? "font-medium text-accent-strong" : "text-muted"}`}>
+          {moreOpen ? <X size={20} aria-hidden /> : <Menu size={20} aria-hidden />}
+          <span>{t.nav.more}</span>
+        </button>
+      </nav>
+    </>
   );
 }

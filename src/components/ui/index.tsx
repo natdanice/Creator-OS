@@ -10,7 +10,7 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
         <div className="mb-2">
           <MockBadge />
         </div>
-        <h1 className="text-2xl font-semibold md:text-[28px]">{title}</h1>
+        <h1 className="text-2xl font-medium md:text-[30px]">{title}</h1>
         {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
       </div>
       {right}
@@ -18,11 +18,14 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
   );
 }
 
-export function Card({ id, title, hint, right, children, className = "", bodyClass = "p-5" }: { id?: string; title?: React.ReactNode; hint?: string; right?: React.ReactNode; children: React.ReactNode; className?: string; bodyClass?: string }) {
+export function Card({ id, title, hint, right, children, className = "", bodyClass }: { id?: string; title?: React.ReactNode; hint?: string; right?: React.ReactNode; children: React.ReactNode; className?: string; bodyClass?: string }) {
+  const hasHeader = !!(title || right);
+  // Clean Studio: no rule under the header; the title sits on the same white surface as the content.
+  const body = bodyClass ?? (hasHeader ? "px-5 pb-5 pt-2" : "p-5");
   return (
     <section id={id} className={`rounded-xl border border-line bg-card ${className}`}>
-      {(title || right) && (
-        <div className="flex flex-wrap items-start justify-between gap-2 border-b border-line px-5 py-3.5">
+      {hasHeader && (
+        <div className="flex flex-wrap items-start justify-between gap-2 px-5 pb-2 pt-4">
           <div>
             {title && <h2 className="text-base font-medium">{title}</h2>}
             {hint && <p className="mt-0.5 text-xs text-muted">{hint}</p>}
@@ -30,7 +33,7 @@ export function Card({ id, title, hint, right, children, className = "", bodyCla
           {right}
         </div>
       )}
-      <div className={bodyClass}>{children}</div>
+      <div className={body}>{children}</div>
     </section>
   );
 }
@@ -55,14 +58,19 @@ export function ButtonLink({ href, children, variant = "primary" }: { href: stri
   );
 }
 
-/** Headline number with a label and an optional one-line context. */
-export function StatTile({ label, value, sub, hint, tone }: { label: string; value: string; sub?: React.ReactNode; hint?: string; tone?: "bad" | "warn" }) {
+/** A row of headline figures separated by hairlines (no boxes). Children are StatTiles. */
+export function StatStrip({ children, cols = 4 }: { children: React.ReactNode; cols?: 4 | 5 }) {
+  return <div className={`grid grid-cols-2 gap-px border-y border-line bg-line ${cols === 5 ? "md:grid-cols-5" : "xl:grid-cols-4"}`}>{children}</div>;
+}
+
+/** Headline number with a label and an optional one-line context. Lives inside a StatStrip. */
+export function StatTile({ label, value, sub, hint, tone, size = "lg" }: { label: string; value: string; sub?: React.ReactNode; hint?: string; tone?: "bad" | "warn"; size?: "lg" | "md" }) {
   return (
-    <div className="rounded-xl border border-line bg-card p-5">
+    <div className="min-w-0 bg-card px-4 py-4 md:px-5">
       <div className="text-sm text-muted" title={hint}>
         {label}
       </div>
-      <div className={`tabular mt-1 font-heading text-[28px] font-semibold leading-tight ${tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : ""}`}>{value}</div>
+      <div className={`tabular mt-1 font-heading font-medium leading-tight ${size === "lg" ? "text-[26px]" : "text-xl"} ${tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : ""}`}>{value}</div>
       {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
     </div>
   );

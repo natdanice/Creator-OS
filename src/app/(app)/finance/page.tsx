@@ -3,7 +3,7 @@ import { Download } from "lucide-react";
 import { getDb } from "@/db/client";
 import { AGEING, financeData, INCOME_BUCKETS, type InvoiceStatus } from "@/crm/finance";
 import { getStoryDate } from "@/lib/queries/settings";
-import { Card, PageHeader, Pill, ShareBar, StatTile } from "@/components/ui";
+import { Card, PageHeader, Pill, ShareBar, StatStrip, StatTile } from "@/components/ui";
 import { MonthlyIncomeChart } from "@/components/charts/MonthlyIncomeChart";
 import { MarkPaidButton } from "@/components/finance/MarkPaidButton";
 import { baht, signedPct } from "@/lib/format";
@@ -41,14 +41,14 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
     <>
       <PageHeader title={t.finance.title} subtitle={t.finance.subtitle} />
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <StatStrip>
         <StatTile label={t.finance.kpiIncome} hint={t.finance.kpiIncomeHint} value={baht(k.incomeYtd)} sub={change === null ? t.finance.kpiIncomeHint : fmt(t.finance.vsLastYear, { change: signedPct(change, 0) })} />
         <StatTile label={t.finance.kpiOutstanding} value={baht(k.outstanding)} sub={fmt(t.finance.invoicesN, { n: k.outstandingCount })} />
         <StatTile label={t.finance.kpiOverdue} value={baht(k.overdue)} tone={k.overdue ? "bad" : undefined} sub={fmt(t.finance.invoicesN, { n: k.overdueCount })} />
         <StatTile label={t.finance.kpiExpected} value={baht(k.expected)} sub={fmt(t.finance.dealsN, { n: k.expectedCount })} />
-      </div>
+      </StatStrip>
 
-      <div className="mt-4 grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="mt-6 grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card title={t.finance.monthly} hint={t.finance.monthlyHint} className="xl:col-span-2">
           <MonthlyIncomeChart data={d.monthly} />
           {k.avgDaysToPay !== null && <p className="mt-3 text-xs text-muted">{fmt(t.finance.avgDaysToPay, { n: Math.round(k.avgDaysToPay) })}</p>}

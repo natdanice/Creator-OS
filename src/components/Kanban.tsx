@@ -50,7 +50,7 @@ export function Kanban({ deals, stages }: { deals: KanbanDeal[]; stages: readonl
               const id = Number(e.dataTransfer.getData("text/deal"));
               if (id) doMove(id, stage);
             }}
-            className={`flex w-[230px] shrink-0 flex-col rounded-xl border p-2 transition-colors ${over === stage ? "border-accent bg-accent-soft/50" : "border-line bg-[#ece8de]"}`}
+            className={`flex w-[230px] shrink-0 flex-col rounded-xl border p-2 transition-colors ${over === stage ? "border-accent bg-accent-soft/50" : "border-transparent bg-paper/70"}`}
           >
             <header className="flex items-baseline justify-between px-1.5 pb-2 pt-1">
               <h2 className="text-sm font-medium">
@@ -78,7 +78,7 @@ export function Kanban({ deals, stages }: { deals: KanbanDeal[]; stages: readonl
                     aria-label={t.pipeline.moveTo}
                     value={d.stage}
                     onChange={(e) => doMove(d.id, e.target.value as DealStage)}
-                    className="mt-2 w-full rounded-md border border-line bg-paper px-2 py-1 text-xs"
+                    className="mt-2 w-full rounded-md border border-line bg-white px-2 py-1 text-xs"
                   >
                     {stages.map((s) => (
                       <option key={s} value={s}>

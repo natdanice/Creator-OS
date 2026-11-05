@@ -1,0 +1,15 @@
+# Render Blueprint — free demo hosting for the class presentation.
+# The free plan has no persistent disk, so every start rebuilds the demo
+# database from the seed (`start:demo`). Changes made in the app are lost
+# when the service sleeps (after ~15 min idle) or redeploys.
+services:
+  - type: web
+    name: creator-os
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:demo
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "24"

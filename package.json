@@ -10,6 +10,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "start:demo": "npm run seed && next start",
     "seed": "tsx scripts/seed.ts",
     "verify": "tsx scripts/verify-story.ts",
     "typecheck": "tsc --noEmit",
