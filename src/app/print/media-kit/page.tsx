@@ -14,6 +14,7 @@ import { addDays } from "@/lib/dates";
 import { baht, compactNum, num, pct } from "@/lib/format";
 import { fmt } from "@/lib/i18n";
 import { getI18n } from "@/lib/i18n/server";
+import { getProfile } from "@/lib/queries/profile";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -47,7 +48,7 @@ export default async function MediaKitPage() {
           </>
         }
       />
-      <p className="-mt-4 mb-8 text-sm text-ink-2">{t.mediaKit.tagline}</p>
+      <p className="-mt-4 mb-8 text-sm text-ink-2">{getProfile(db).tagline || t.mediaKit.tagline}</p>
 
       <section className="mb-8 break-inside-avoid">
         <h2 className="mb-3 text-lg font-medium">{t.mediaKit.audience}</h2>

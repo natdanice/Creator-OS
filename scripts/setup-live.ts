@@ -18,4 +18,4 @@ const { db, sqlite } = openDb(file);
 migrate(db, { migrationsFolder: path.join(process.cwd(), "drizzle") });
 insertReferenceData(db, { tiktok: "—", instagram: "—", youtube: "—" });
 sqlite.close();
-console.log(`✓ Created ${file}\nNext: set APP_MODE=live, APP_PASSWORD and AUTH_SECRET in .env.local, then npm run dev`);
+console.log(`✓ Created ${file}\nNext: npm run dev:live (secrets in .env.local; see .env.example)`);

@@ -5,6 +5,7 @@ import { brandContacts, brands, deals, quoteItems, quotes, rateCard } from "@/db
 import { PrintFooter, PrintHeader } from "@/components/PrintHeader";
 import { baht } from "@/lib/format";
 import { getI18n } from "@/lib/i18n/server";
+import { getProfile } from "@/lib/queries/profile";
 
 export async function generateMetadata() {
   const { t } = await getI18n();
@@ -15,6 +16,7 @@ export default async function QuotePrint({ params }: { params: Promise<{ id: str
   const { t, date, dateShort } = await getI18n();
   const { id } = await params;
   const db = getDb();
+  const profile = getProfile(db);
   const q = db.select().from(quotes).where(eq(quotes.id, Number(id))).get();
   if (!q) notFound();
   const brand = db.select().from(brands).where(eq(brands.id, q.brandId)).get()!;
@@ -58,8 +60,13 @@ export default async function QuotePrint({ params }: { params: Promise<{ id: str
         </div>
         <div>
           <div className="text-xs text-muted">{t.quote.from}</div>
-          <div className="mt-1 font-medium">Everyday Mock (@everyday.mock)</div>
-          <div className="text-muted">TikTok · Instagram · YouTube</div>
+          <div className="mt-1 font-medium">{profile.name}</div>
+          <div className="text-muted">
+            {(["tiktok", "instagram", "youtube"] as const)
+              .filter((p) => profile.handles[p])
+              .map((p) => `${t.platforms[p]} ${profile.handles[p]}`)
+              .join(" · ") || "TikTok · Instagram · YouTube"}
+          </div>
         </div>
       </section>
       <table className="w-full text-sm">

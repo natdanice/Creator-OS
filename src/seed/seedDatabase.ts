@@ -41,7 +41,12 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
   const rng = createRng(Number(process.env.SEED ?? 42));
 
   insertReferenceData(db);
-  db.insert(s.appSettings).values([{ key: "story_date", value: STORY_DATE }]).run();
+  db.insert(s.appSettings)
+    .values([
+      { key: "story_date", value: STORY_DATE },
+      { key: "creator_name", value: "Everyday Mock" },
+    ])
+    .run();
 
   // CRM story
   const price = Object.fromEntries(RATE_CARD.map((r) => [r.code, r.price]));

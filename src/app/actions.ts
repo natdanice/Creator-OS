@@ -375,6 +375,37 @@ export async function saveRatesAction(formData: FormData) {
   revalidateAll();
 }
 
+/* ───────── Your profile & CRM import ───────── */
+
+export async function saveProfileAction(formData: FormData) {
+  const { setSetting } = await import("@/lib/queries/profile");
+  const { platforms } = await import("@/db/schema");
+  const db = getDb();
+  setSetting(db, "creator_name", String(formData.get("name") ?? "").trim());
+  setSetting(db, "creator_tagline", String(formData.get("tagline") ?? "").trim());
+  for (const p of ["tiktok", "instagram", "youtube"]) {
+    const handle = String(formData.get(`handle_${p}`) ?? "").trim();
+    db.update(platforms).set({ handle: handle || "—" }).where(eq(platforms.id, p)).run();
+  }
+  revalidateAll();
+}
+
+export async function importCrmAction(_prev: ImportState | null, formData: FormData): Promise<ImportState> {
+  const { importCrm } = await import("@/crm/importCrm");
+  const { t } = await getI18n();
+  const file = formData.get("file");
+  if (!(file instanceof File) || file.size === 0) return { ok: false, message: fmt(t.settings.importFail, { message: "CSV" }) };
+  try {
+    const db = getDb();
+    const r = importCrm(db, await file.text(), getStoryDate(db));
+    revalidateAll();
+    const msg = fmt(t.crmImport.done, { brands: r.brands, deals: r.deals, invoices: r.invoices, skipped: r.skipped });
+    return { ok: r.errors.length === 0, message: r.errors.length ? `${msg} · ${r.errors.slice(0, 5).join(" · ")}` : msg };
+  } catch (e) {
+    return { ok: false, message: fmt(t.settings.importFail, { message: e instanceof Error ? e.message : String(e) }) };
+  }
+}
+
 /* ───────── Finance ───────── */
 
 export async function markInvoicePaid(invoiceId: number) {

@@ -1,5 +1,7 @@
 import { MockBadge } from "@/components/ui";
 import { getI18n } from "@/lib/i18n/server";
+import { getDb } from "@/db/client";
+import { getProfile } from "@/lib/queries/profile";
 
 export async function PrintHeader({ title, right }: { title: string; right: React.ReactNode }) {
   const { t, date, dateShort } = await getI18n();
@@ -8,7 +10,7 @@ export async function PrintHeader({ title, right }: { title: string; right: Reac
       <div>
         <div className="flex items-center gap-2">
           <div className="grid h-8 w-8 place-items-center rounded-lg bg-accent font-heading font-semibold text-ink">C</div>
-          <span className="font-heading text-lg">Everyday Mock</span>
+          <span className="font-heading text-lg">{getProfile(getDb()).name}</span>
           <MockBadge />
         </div>
         <h1 className="mt-4 text-3xl font-semibold">{title}</h1>

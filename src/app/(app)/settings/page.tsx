@@ -5,11 +5,12 @@ import { comments, connections, importRuns, platforms, rateCard, type Provider }
 import { consentSummary } from "@/cdp/consent";
 import { CSV_COLUMNS } from "@/cdp/adapters/csv/CsvAdapter";
 import { getStoryDate } from "@/lib/queries/settings";
-import { CsvImportForm, ResetDemoButton } from "@/components/DataSourceForms";
+import { CrmImportForm, CsvImportForm, ResetDemoButton } from "@/components/DataSourceForms";
+import { getProfile } from "@/lib/queries/profile";
 import { btn, Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
 import { DisconnectButton, LogoutButton, SyncButton } from "@/components/settings/ConnectionButtons";
 import { configured, envNames, redirectUri } from "@/connect/providers";
-import { saveRatesAction } from "@/app/actions";
+import { saveProfileAction, saveRatesAction } from "@/app/actions";
 import { authEnabled } from "@/lib/auth";
 import { APP_URL } from "@/lib/config";
 import { fmt } from "@/lib/i18n";
@@ -33,6 +34,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const plats = db.select().from(platforms).all();
   const conns = db.select().from(connections).all();
   const cards = db.select().from(rateCard).all();
+  const profile = getProfile(db);
   const runs = db.select().from(importRuns).orderBy(desc(importRuns.startedAt), desc(importRuns.id)).all();
   const consent = consentSummary(db);
   const redacted = db.select({ n: sql<number>`count(*)` }).from(comments).where(eq(comments.redacted, true)).get()!.n;
@@ -46,6 +48,28 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   return (
     <>
       <PageHeader title={t.settings.title} subtitle={`${live ? t.app.todayLive : t.settings.storyDate}: ${today}`} right={authEnabled() ? <LogoutButton /> : undefined} />
+
+      <Card title={t.profile.title} hint={t.profile.hint} className="mb-4">
+        <form action={saveProfileAction} className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <label className="text-xs text-muted">
+            {t.profile.name}
+            <input id="profile-name" name="name" defaultValue={profile.name === "Creator" ? "" : profile.name} className={`${btn.input} mt-1 w-full text-ink`} />
+          </label>
+          <label className="text-xs text-muted">
+            {t.profile.tagline}
+            <input id="profile-tagline" name="tagline" defaultValue={profile.tagline} placeholder={t.profile.taglinePh} className={`${btn.input} mt-1 w-full text-ink`} />
+          </label>
+          {(["tiktok", "instagram", "youtube"] as const).map((p) => (
+            <label key={p} className="text-xs text-muted">
+              {t.platforms[p]}
+              <input id={`profile-${p}`} name={`handle_${p}`} defaultValue={profile.handles[p] ?? ""} placeholder={p === "youtube" ? "Channel name" : "@handle"} className={`${btn.input} mt-1 w-full text-ink`} />
+            </label>
+          ))}
+          <div className="flex items-end">
+            <button className={btn.primary}>{t.profile.save}</button>
+          </div>
+        </form>
+      </Card>
 
       <Card id="connections" title={t.connect.title} hint={t.connect.hint} className="mb-4 scroll-mt-6" bodyClass="px-5 pb-2 pt-1">
         {connected && <p role="status" className="mb-3 rounded-lg bg-good-soft px-3 py-2 text-sm text-good">{t.connect.connectedOk}</p>}
@@ -141,6 +165,16 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           );
         })}
       </div>
+
+      <Card title={t.crmImport.title} hint={t.crmImport.hint} className="mt-4">
+        <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-start">
+          <CrmImportForm />
+          <a href="/api/templates/crm" className={btn.ghost}>
+            {t.crmImport.template}
+          </a>
+        </div>
+        <p className="mt-3 text-xs text-muted">{t.crmImport.columns}</p>
+      </Card>
 
       <Card title={t.settings.history} className="mt-4" bodyClass="overflow-x-auto">
         <table className="w-full min-w-[640px] text-sm">

@@ -9,3 +9,6 @@ next-env.d.ts
 .env*
 data/uploads/
 !.env.example
+
+# Real data stays on this computer only
+data/import/
