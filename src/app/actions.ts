@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb, DB_PATH } from "@/db/client";
-import { activities, DEAL_STAGES, deals, invoices, quoteItems, quotes, rateCard, tasks, type ActivityType, type DealStage } from "@/db/schema";
+import { activities, brandContacts, comments, DEAL_STAGES, deals, invoices, messages, quoteItems, quotes, rateCard, tasks, type ActivityType, type DealStage } from "@/db/schema";
 import { getStoryDate } from "@/lib/queries/settings";
 import { addDays } from "@/lib/dates";
 import { cookies } from "next/headers";
@@ -21,6 +21,9 @@ import { CsvAdapter } from "@/cdp/adapters/csv/CsvAdapter";
 import type { PlatformId } from "@/cdp/adapters/PlatformAdapter";
 import { cancelJob, createJob, publishDue, publishJob, type CreateResult } from "@/publish/service";
 import type { ComposeDraft } from "@/publish/types";
+import { guessDeliverables } from "@/inbox/briefDetector";
+import { gatherFacts } from "@/ai/facts";
+import { getAssistant, RuleAssistant, type Answer, type ChatTurn } from "@/ai";
 
 function revalidateAll() {
   revalidatePath("/", "layout");
@@ -153,6 +156,10 @@ export async function completeTask(taskId: number, finalMessage: string) {
         .values({ brandId: task.brandId, dealId: task.dealId, type, channel: task.channel === "internal" ? "system" : task.channel === "line" ? "line" : "email", summary: task.title, occurredAt: at })
         .run();
     }
+    // Approved drafts to a brand also land in that brand's Inbox thread.
+    if (task.brandId && task.channel !== "internal") {
+      tx.insert(messages).values({ brandId: task.brandId, direction: "out", channel: task.channel, body: finalMessage, sentAt: at, readAt: at, taskId: task.id, dealId: task.dealId }).run();
+    }
     // Sending the +7 report moves a Posted deal forward in the pipeline.
     if (task.ruleId === "post_plus_7" && task.dealId) {
       tx.update(deals).set({ stage: "report_sent" }).where(and(eq(deals.id, task.dealId), eq(deals.stage, "posted"))).run();
@@ -177,6 +184,108 @@ export async function toggleRule(ruleId: string, enabled: boolean) {
   const { automationRules } = await import("@/db/schema");
   getDb().update(automationRules).set({ enabled }).where(eq(automationRules.id, ruleId)).run();
   revalidateAll();
+}
+
+/* ───────── Inbox ───────── */
+
+/** Next timestamp in a thread: the simulated 10:00, or just after the thread's latest message. */
+function nextThreadTime(brandId: number, today: string) {
+  const last = getDb().select({ at: sql<string>`max(${messages.sentAt})` }).from(messages).where(eq(messages.brandId, brandId)).get()?.at;
+  const base = `${today}T10:00:00`;
+  if (!last || last < base) return base;
+  const d = new Date(last + "Z");
+  d.setUTCMinutes(d.getUTCMinutes() + 1);
+  return d.toISOString().slice(0, 19);
+}
+
+export async function markThreadRead(brandId: number) {
+  const db = getDb();
+  const today = getStoryDate(db);
+  const res = db
+    .update(messages)
+    .set({ readAt: `${today}T10:00:00` })
+    .where(and(eq(messages.brandId, brandId), eq(messages.direction, "in"), sql`${messages.readAt} is null`))
+    .run();
+  if (res.changes) revalidateAll();
+}
+
+export async function sendBrandReply(brandId: number, body: string) {
+  const text = body.trim();
+  if (!text) return;
+  const db = getDb();
+  const today = getStoryDate(db);
+  const contact = db.select().from(brandContacts).where(and(eq(brandContacts.brandId, brandId), eq(brandContacts.isPrimary, true))).get();
+  const channel = contact?.channel ?? "line";
+  const at = nextThreadTime(brandId, today);
+  db.transaction((tx) => {
+    tx.insert(messages).values({ brandId, direction: "out", channel, body: text, sentAt: at, readAt: at }).run();
+    tx.insert(activities).values({ brandId, type: "chat", channel, summary: text.length > 80 ? text.slice(0, 80) + "…" : text, occurredAt: at }).run();
+  });
+  revalidateAll();
+}
+
+/** Turn a detected brief into a deal at the Brief stage. */
+export async function convertBrief(messageId: number, title: string, value: number) {
+  const db = getDb();
+  const today = getStoryDate(db);
+  const msg = db.select().from(messages).where(eq(messages.id, messageId)).get();
+  if (!msg || msg.briefStatus !== "new") return;
+  const cards = db.select().from(rateCard).all();
+  const deliverables = guessDeliverables(msg.brief?.platforms ?? []);
+  const listPrice = deliverables.reduce((sum, c) => sum + (cards.find((x) => x.code === c)?.price ?? 0), 0);
+  const dealTitle = title.trim() || msg.brief?.product || dataT.quote.newDeal;
+  const dealValue = Number.isFinite(value) && value > 0 ? Math.round(value) : (msg.brief?.budget ?? listPrice);
+  db.transaction((tx) => {
+    const deal = tx.insert(deals).values({ brandId: msg.brandId, title: dealTitle, stage: "brief", value: dealValue, deliverables, createdAt: `${today}T10:00:00` }).returning({ id: deals.id }).get();
+    tx.update(messages).set({ briefStatus: "converted", dealId: deal.id, readAt: msg.readAt ?? `${today}T10:00:00` }).where(eq(messages.id, messageId)).run();
+    tx.insert(activities).values({ brandId: msg.brandId, dealId: deal.id, type: "brief_received", channel: msg.channel, summary: `ได้รับบรีฟ: ${dealTitle}`, occurredAt: `${today}T10:00:00` }).run();
+  });
+  revalidateAll();
+}
+
+export async function ignoreBrief(messageId: number) {
+  getDb().update(messages).set({ briefStatus: "ignored" }).where(and(eq(messages.id, messageId), eq(messages.briefStatus, "new"))).run();
+  revalidateAll();
+}
+
+export async function replyComment(commentId: number, text: string) {
+  const db = getDb();
+  db.update(comments).set({ replyStatus: "replied", replyText: text.trim() || null, repliedAt: `${getStoryDate(db)}T10:00:00` }).where(eq(comments.id, commentId)).run();
+  revalidateAll();
+}
+
+export async function hideComment(commentId: number) {
+  getDb().update(comments).set({ replyStatus: "hidden" }).where(eq(comments.id, commentId)).run();
+  revalidateAll();
+}
+
+/* ───────── Finance ───────── */
+
+export async function markInvoicePaid(invoiceId: number) {
+  const db = getDb();
+  const inv = db.select().from(invoices).where(eq(invoices.id, invoiceId)).get();
+  if (!inv || inv.paidAt) return;
+  // Paying the invoice is the same event as the deal reaching Paid (logs the timeline too).
+  await moveDealStage(inv.dealId, "paid");
+  db.update(invoices).set({ paidAt: getStoryDate(db) }).where(and(eq(invoices.id, invoiceId), sql`${invoices.paidAt} is null`)).run();
+  revalidateAll();
+}
+
+/* ───────── Ask AI ───────── */
+
+export async function askAiAction(question: string, history: ChatTurn[]): Promise<Answer & { fallback?: boolean }> {
+  const q = question.trim().slice(0, 500);
+  const i18n = await getI18n();
+  const db = getDb();
+  const facts = gatherFacts(db, getStoryDate(db), i18n);
+  const assistant = getAssistant();
+  try {
+    return await assistant.answer(q, facts, i18n, history.slice(-6));
+  } catch (e) {
+    if (assistant.engine === "rules") throw e;
+    console.error("Ask AI: Claude failed, answering offline:", e instanceof Error ? e.message : e);
+    return { ...(await new RuleAssistant().answer(q, facts, i18n)), fallback: true };
+  }
 }
 
 /* ───────── Publisher ───────── */

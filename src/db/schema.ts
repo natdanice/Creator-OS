@@ -98,6 +98,10 @@ export const comments = sqliteTable(
     classifier: text("classifier").notNull(), // which classifier produced `category`
     redacted: integer("redacted", { mode: "boolean" }).notNull().default(false), // consent withdrawn → text wiped, excluded from analytics
     createdAt: text("created_at").notNull(),
+    // Inbox triage. Replies are drafted here and posted by the creator on the platform (nothing is sent).
+    replyStatus: text("reply_status").$type<"open" | "replied" | "hidden">().notNull().default("open"),
+    replyText: text("reply_text"),
+    repliedAt: text("replied_at"),
   },
   (t) => [index("comments_content").on(t.contentId), index("comments_created").on(t.createdAt)],
 );
@@ -238,6 +242,33 @@ export const quoteItems = sqliteTable("quote_items", {
   qty: integer("qty").notNull(),
   unitPrice: integer("unit_price").notNull(),
 });
+
+/** Brand conversations (LINE OA / IG DM / email), mock-imported. One thread per brand. */
+export interface BriefSignal {
+  budget: number | null;
+  platforms: ("tiktok" | "instagram" | "youtube")[];
+  timing: string | null; // the matched phrase, e.g. "ต้นเดือนธันวาคม"
+  product: string | null;
+}
+
+export const messages = sqliteTable(
+  "messages",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    brandId: integer("brand_id").notNull().references(() => brands.id),
+    direction: text("direction").$type<"in" | "out">().notNull(),
+    channel: text("channel").$type<"line" | "email" | "ig_dm">().notNull(),
+    body: text("body").notNull(),
+    sentAt: text("sent_at").notNull(),
+    readAt: text("read_at"),
+    // Brief detection on inbound messages (see inbox/briefDetector.ts)
+    brief: text("brief", { mode: "json" }).$type<BriefSignal>(),
+    briefStatus: text("brief_status").$type<"none" | "new" | "converted" | "ignored">().notNull().default("none"),
+    dealId: integer("deal_id").references(() => deals.id),
+    taskId: integer("task_id"), // outbound message that came from an approved automation draft
+  },
+  (t) => [index("messages_brand").on(t.brandId)],
+);
 
 /* ───────────────────────────── Automation ───────────────────────────── */
 

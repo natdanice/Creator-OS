@@ -18,9 +18,9 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
   );
 }
 
-export function Card({ title, hint, right, children, className = "", bodyClass = "p-5" }: { title?: React.ReactNode; hint?: string; right?: React.ReactNode; children: React.ReactNode; className?: string; bodyClass?: string }) {
+export function Card({ id, title, hint, right, children, className = "", bodyClass = "p-5" }: { id?: string; title?: React.ReactNode; hint?: string; right?: React.ReactNode; children: React.ReactNode; className?: string; bodyClass?: string }) {
   return (
-    <section className={`rounded-xl border border-line bg-card ${className}`}>
+    <section id={id} className={`rounded-xl border border-line bg-card ${className}`}>
       {(title || right) && (
         <div className="flex flex-wrap items-start justify-between gap-2 border-b border-line px-5 py-3.5">
           <div>
@@ -52,6 +52,32 @@ export function ButtonLink({ href, children, variant = "primary" }: { href: stri
     <Link href={href} className={`inline-flex items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${cls}`}>
       {children}
     </Link>
+  );
+}
+
+/** Headline number with a label and an optional one-line context. */
+export function StatTile({ label, value, sub, hint, tone }: { label: string; value: string; sub?: React.ReactNode; hint?: string; tone?: "bad" | "warn" }) {
+  return (
+    <div className="rounded-xl border border-line bg-card p-5">
+      <div className="text-sm text-muted" title={hint}>
+        {label}
+      </div>
+      <div className={`tabular mt-1 font-heading text-[28px] font-semibold leading-tight ${tone === "bad" ? "text-bad" : tone === "warn" ? "text-warn" : ""}`}>{value}</div>
+      {sub && <div className="mt-1 text-xs text-muted">{sub}</div>}
+    </div>
+  );
+}
+
+/** Horizontal share bar: label, bar, value. `color` is a CSS color (series identity); text stays in ink tokens. */
+export function ShareBar({ label, value, share, color = "var(--color-ink-2)" }: { label: React.ReactNode; value: string; share: number; color?: string }) {
+  return (
+    <div className="grid grid-cols-[minmax(0,7rem)_1fr_auto] items-center gap-3 text-xs">
+      <div className="truncate text-ink-2">{label}</div>
+      <div className="h-2 overflow-hidden rounded-full bg-paper" aria-hidden>
+        <div className="h-full rounded-full" style={{ width: `${Math.max(0, Math.min(1, share)) * 100}%`, background: color }} />
+      </div>
+      <div className="tabular text-right text-ink">{value}</div>
+    </div>
   );
 }
 

@@ -6,22 +6,22 @@ import { Bot, Building2, Inbox, Languages, LayoutDashboard, Send, Settings, Spar
 import { useI18n } from "@/lib/i18n/client";
 import { setLocaleAction } from "@/app/actions";
 
-export function Sidebar({ storyDate }: { storyDate: string }) {
+export function Sidebar({ storyDate, inboxUnread }: { storyDate: string; inboxUnread: number }) {
   const { t, locale } = useI18n();
   const [switching, start] = useTransition();
   const ITEMS = [
     { href: "/", label: t.nav.overview, icon: LayoutDashboard },
     { href: "/content", label: t.nav.content, icon: Send },
-    { href: "/inbox", label: t.nav.inbox, icon: Inbox, soon: true },
-    { href: "/audience", label: t.nav.audience, icon: Users, soon: true },
+    { href: "/inbox", label: t.nav.inbox, icon: Inbox, badge: inboxUnread },
+    { href: "/audience", label: t.nav.audience, icon: Users },
     { href: "/brands", label: t.nav.brands, icon: Building2 },
     { href: "/automation", label: t.nav.automation, icon: Bot },
-    { href: "/finance", label: t.nav.finance, icon: Wallet, soon: true },
-    { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles, soon: true },
+    { href: "/finance", label: t.nav.finance, icon: Wallet },
+    { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles },
   ];
   const path = usePathname();
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
-  const item = (it: { href: string; label: string; icon: typeof Bot; soon?: boolean }) => {
+  const item = (it: { href: string; label: string; icon: typeof Bot; badge?: number }) => {
     const Icon = it.icon;
     const on = active(it.href);
     return (
@@ -34,7 +34,7 @@ export function Sidebar({ storyDate }: { storyDate: string }) {
       >
         <Icon size={18} className={on ? "text-accent" : ""} aria-hidden />
         <span className="whitespace-nowrap">{it.label}</span>
-        {it.soon && <span className="ml-auto hidden rounded bg-white/10 px-1.5 py-0.5 text-[10px] text-white/50 md:inline">{t.nav.soon}</span>}
+        {!!it.badge && <span className="tabular ml-auto rounded-full bg-accent px-1.5 text-[11px] font-medium text-white">{it.badge}</span>}
       </Link>
     );
   };

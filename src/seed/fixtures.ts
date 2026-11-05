@@ -136,3 +136,55 @@ export const AUTOMATION_RULES = [
   { id: "invoice_overdue_30", name: "เตือนบิลค้างชำระ", trigger: "ใบแจ้งหนี้เลยกำหนด ≥ 30 วัน", channel: "internal" as const },
   { id: "pq_spike", name: "คำถามสินค้าพุ่ง", trigger: "คอมเมนต์ถามสินค้าในหมวด 7 วันล่าสุด ≥ 3× ค่าเฉลี่ย 28 วันก่อนหน้า (และ ≥ 20)", channel: "internal" as const },
 ];
+
+export interface MessageSpec {
+  brand: string;
+  daysAgo: number;
+  time: string;
+  direction: "in" | "out";
+  body: string;
+  /** Deal this conversation became (marks a detected brief as converted). */
+  deal?: string;
+  unread?: boolean;
+}
+
+/**
+ * Brand inbox (mock LINE OA / IG DM / email). `{inv:KEY}` is replaced with that deal's invoice number.
+ * Two new briefs are waiting: Kumo Audio and Fresh Leaf. Silent brands have no recent messages.
+ */
+export const MESSAGES: MessageSpec[] = [
+  { brand: "glow", daysAgo: 13, time: "16:05:00", direction: "in", body: "ขอบคุณสำหรับรายงานผลมอยส์เจอไรเซอร์นะคะ ทีมชอบมากเลยค่ะ" },
+  { brand: "glow", daysAgo: 12, time: "09:20:00", direction: "out", body: "ยินดีค่ะคุณแพรวา ไว้มีแคมเปญใหม่บอกได้เลยนะคะ 🙏" },
+  { brand: "glow", daysAgo: 3, time: "09:30:00", direction: "in", deal: "G6", body: "สวัสดีค่ะ มีบรีฟแคมเปญ 12.12 มาฝากค่ะ อยากได้ TikTok 1 คลิป + IG Reel 1 ชิ้น โพสต์ก่อนวันที่ 10 ธ.ค. งบประมาณ 30,000 บาทค่ะ" },
+  { brand: "glow", daysAgo: 3, time: "11:10:00", direction: "out", body: "รับบรีฟแล้วค่ะ ขอเวลาวางไอเดีย แล้วจะส่งใบเสนอราคาให้ภายในพรุ่งนี้นะคะ" },
+
+  { brand: "kumo", daysAgo: 9, time: "14:30:00", direction: "in", body: "ขอบคุณสำหรับรายงานผลลำโพงนะครับ ผลดีกว่าที่คาดไว้เยอะเลย" },
+  { brand: "kumo", daysAgo: 9, time: "15:02:00", direction: "out", body: "ขอบคุณมากค่ะคุณโอ๊ต ยินดีร่วมงานต่อเลยค่ะ" },
+  { brand: "kumo", daysAgo: 1, time: "20:15:00", direction: "in", unread: true, body: "สวัสดีครับ ทาง Kumo มีหูฟังรุ่นใหม่ Kumo Air 2 เปิดตัวต้นเดือนธันวาคม อยากได้คลิป TikTok 1 คลิป และ YouTube รีวิวสั้น งบประมาณราว 40,000 บาทครับ สนใจร่วมงานไหมครับ" },
+
+  { brand: "fresh", daysAgo: 1, time: "17:40:00", direction: "in", unread: true, body: "สวัสดีค่ะ Fresh Leaf มีชาเขียวรสใหม่ Matcha Yuzu อยากร่วมงานรอบใหม่ค่ะ ขอเป็น TikTok ช่วงกลางเดือนพฤศจิกายน งบประมาณ 2 หมื่นค่ะ" },
+
+  { brand: "pixel", daysAgo: 20, time: "14:30:00", direction: "out", body: "เรียนคุณภูมิ ขออนุญาตติดตามใบแจ้งหนี้ {inv:P3} ซึ่งครบกำหนดแล้วค่ะ หากชำระแล้วรบกวนส่งหลักฐานการโอนให้ด้วยนะคะ ขอบคุณค่ะ" },
+  { brand: "pixel", daysAgo: 5, time: "10:15:00", direction: "in", deal: "P4", body: "สวัสดีครับ ไตรมาส 1 ปีหน้าเราอยากเสนองานแพ็กเกจ 3 แพลตฟอร์มครับ เดี๋ยวขอส่งรายละเอียดตามมานะครับ" },
+  { brand: "pixel", daysAgo: 1, time: "18:20:00", direction: "in", unread: true, body: "ขออภัยเรื่องบิลล่าช้าครับ ฝ่ายบัญชีแจ้งว่าจะโอนภายในสัปดาห์หน้าครับ" },
+
+  { brand: "mellow", daysAgo: 30, time: "14:30:00", direction: "out", body: "ส่งไอเดียคอนเทนต์ปีใหม่ให้ดูนะคะ มี 3 แบบ แนบไฟล์ไว้ในอีเมลแล้วค่ะ" },
+  { brand: "mellow", daysAgo: 14, time: "10:00:00", direction: "in", deal: "M3", body: "ชอบไอเดียที่ 2 ค่ะ ขอเป็น TikTok + IG Reel นะคะ ตามเรทเดิมได้เลยค่ะ" },
+  { brand: "mellow", daysAgo: 2, time: "13:45:00", direction: "in", body: "ดราฟต์โอเคแล้วค่ะ โพสต์ได้ตามแผนเลยนะคะ" },
+
+  { brand: "aroma", daysAgo: 8, time: "15:00:00", direction: "out", body: "ส่งใบเสนอราคาแพ็กเกจปลายปีให้แล้วนะคะ มีข้อสงสัยทักมาได้เลยค่ะ" },
+  { brand: "aroma", daysAgo: 0, time: "08:40:00", direction: "in", unread: true, body: "ขอบคุณค่ะ ขอปรับลดเหลือ 40,000 ได้ไหมคะ ถ้าได้จะยืนยันภายในอาทิตย์นี้ค่ะ" },
+
+  { brand: "cloud", daysAgo: 9, time: "11:30:00", direction: "in", deal: "C1", body: "สวัสดีค่ะ สนใจให้รีวิวหมอนยางพาราลง IG Reel ค่ะ อยากให้โพสต์ภายในเดือนหน้า" },
+  { brand: "cloud", daysAgo: 1, time: "12:05:00", direction: "in", unread: true, body: "ส่งหมอนตัวอย่างไปให้แล้วนะคะ น่าจะถึงวันจันทร์ค่ะ" },
+
+  { brand: "orbit", daysAgo: 20, time: "13:20:00", direction: "in", deal: "O1", body: "สอบถามเรทรีวิวรองเท้าวิ่งบน TikTok ค่ะ" },
+  { brand: "orbit", daysAgo: 6, time: "09:30:00", direction: "in", deal: "O2", body: "มีบรีฟชุดออกกำลังกายมาเพิ่มค่ะ IG Reel + Story ปลายเดือนพฤศจิกายนค่ะ" },
+
+  { brand: "byte", daysAgo: 2, time: "13:20:00", direction: "in", deal: "B1", body: "สวัสดีครับ สนใจให้รีวิวคีย์บอร์ดไร้สายบน YouTube ครับ งบ 2 หมื่นครับ" },
+
+  { brand: "zesty", daysAgo: 4, time: "15:00:00", direction: "out", body: "ส่งใบเสนอราคาเซ็ตครัวมือใหม่ให้แล้วนะคะ" },
+  { brand: "zesty", daysAgo: 0, time: "09:10:00", direction: "in", unread: true, body: "ได้รับแล้วค่ะ ขอเสนอหัวหน้าก่อนนะคะ" },
+
+  { brand: "petal", daysAgo: 11, time: "09:30:00", direction: "in", deal: "PP1", body: "เรียนคุณครีเอเตอร์ ทางเราสนใจร่วมงานแคมเปญไลน์คลีนซิ่งออร์แกนิก ทั้ง TikTok, IG และ YouTube งบประมาณ 45,000 บาท" },
+];

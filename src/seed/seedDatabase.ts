@@ -11,7 +11,8 @@ import { generateMockData, type SponsoredSlot } from "@/cdp/adapters/mock/genera
 import { MockAdapter } from "@/cdp/adapters/mock/MockAdapter";
 import { ingest } from "@/cdp/ingest";
 import { applyConsent, withdrawConsent } from "@/cdp/consent";
-import { AUTOMATION_RULES, BRANDS, DEALS, DELIVERABLE_PLATFORM, PLATFORMS, RATE_CARD, type DealSpec } from "./fixtures";
+import { AUTOMATION_RULES, BRANDS, DEALS, DELIVERABLE_PLATFORM, MESSAGES, PLATFORMS, RATE_CARD, type DealSpec } from "./fixtures";
+import { getBriefDetector } from "@/inbox/briefDetector";
 
 const STAGE_INDEX = Object.fromEntries(s.DEAL_STAGES.map((st, i) => [st, i])) as Record<s.DealStage, number>;
 const atStage = (d: DealSpec, st: s.DealStage) => STAGE_INDEX[d.stage] >= STAGE_INDEX[st];
@@ -62,6 +63,8 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
   }
 
   const sponsored: SponsoredSlot[] = [];
+  const dealIdByKey: Record<string, number> = {};
+  const invoiceByKey: Record<string, string> = {};
   let invoiceNo = 1;
   for (const d of DEALS) {
     const b = brandByKey[d.brand];
@@ -84,15 +87,17 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
       })
       .returning({ id: s.deals.id })
       .get();
+    dealIdByKey[d.key] = deal.id;
 
     // Invoice: issued 10 days after posting, net 30.
     let issued: number | null = null;
     if (atStage(d, "invoiced")) {
       issued = posted! - 10;
+      invoiceByKey[d.key] = `INV-${String(invoiceNo++).padStart(4, "0")}`;
       db.insert(s.invoices)
         .values({
           dealId: deal.id,
-          number: `INV-${String(invoiceNo++).padStart(4, "0")}`,
+          number: invoiceByKey[d.key],
           amount: value,
           issuedAt: addDays(STORY_DATE, -issued),
           dueAt: addDays(STORY_DATE, -issued + 30),
@@ -150,6 +155,28 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
       .run();
   }
 
+  // Brand inbox: inbound messages go through the same brief detector the app uses.
+  const detector = getBriefDetector();
+  for (const m of MESSAGES) {
+    const b = brandByKey[m.brand];
+    const body = m.body.replace(/\{inv:(\w+)\}/g, (_, k: string) => invoiceByKey[k]);
+    const brief = m.direction === "in" ? detector.detect(body) : null;
+    const sentAt = ago(m.daysAgo, m.time);
+    db.insert(s.messages)
+      .values({
+        brandId: brandId[m.brand],
+        direction: m.direction,
+        channel: b.contact.channel,
+        body,
+        sentAt,
+        readAt: m.direction === "in" && m.unread ? null : sentAt,
+        brief,
+        briefStatus: m.deal ? "converted" : brief ? "new" : "none",
+        dealId: m.deal ? dealIdByKey[m.deal] : null,
+      })
+      .run();
+  }
+
   // CDP: generate raw platform data and push it through the real ingest pipeline.
   const bundles = generateMockData({ rng, storyDate: STORY_DATE, historyDays: HISTORY_DAYS, sponsored, spikeCategory: "tech" });
   let agree = 0;
@@ -190,6 +217,7 @@ export async function seedDatabase(file: string): Promise<SeedReport> {
         ["deals", s.deals],
         ["invoices", s.invoices],
         ["activities", s.activities],
+        ["messages", s.messages],
       ] as const
     ).map(([name, table]) => [name, db.select({ n: count() }).from(table).get()!.n]),
   );

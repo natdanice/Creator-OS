@@ -22,7 +22,7 @@ Requirements: Node 22+ (tested on Node 24.19, macOS). The SQLite driver ships pr
 |---|---|
 | `npm run seed` | Rebuilds `data/creator-os.db` from scratch with the seeded story (deterministic) |
 | `npm run dev` | Starts the app |
-| `npm run verify` | Checks the story on a temp copy of the DB: tiers, silent brands, spike, and that automations for the story date produce exactly the expected tasks |
+| `npm run verify` | Checks the story on a temp copy of the DB: tiers, silent brands, spike, the exact automation tasks for the story date, inbox briefs, finance figures, audience segments and Ask AI answers |
 | `npm run typecheck` | TypeScript check |
 | `npm run db:generate` | Regenerate the SQL migration after editing `src/db/schema.ts` |
 
@@ -57,11 +57,14 @@ flowchart LR
   end
   subgraph S4["4 · Single Customer Profile"]
     B[Brand 360<br/>deals + deliverables + post performance<br/>+ invoices + activities]
+    AP[Audience profile<br/>one pseudonymous person]
   end
   A1 & A2 & A3 --> P --> C --> K --> G --> B
   G --> O[Overview dashboard]
   PB[Publisher<br/>write once → TikTok / IG / YouTube] -- "published posts become contents rows" --> G
-  B --> R[CRM: tiers, pipeline, quotes, reports]
+  G --> AP
+  B --> R[CRM: tiers, pipeline, quotes, reports, finance]
+  I[Inbox<br/>brand messages → brief detector → deal] --> B
   G & B --> X[Automation rules → drafted tasks → human approves]
 ```
 
@@ -70,7 +73,10 @@ flowchart LR
 | 1. Dataflow | `src/cdp/adapters/PlatformAdapter.ts` (interface), `adapters/csv/CsvAdapter.ts`, `adapters/mock/*`, `src/cdp/ingest.ts` (runs an adapter end-to-end and logs an `import_runs` row) |
 | 2. Consent | `src/cdp/pseudonymize.ts`, `src/cdp/consent.ts` (`registerAnalyticsBasis`, `applyConsent`, `ANALYTICS_OK` filter) |
 | 3. Segment / Analytics | `src/cdp/classify/*` (classifier interface + keyword rules), `src/cdp/segments.ts` (spikes, audience), `src/crm/contentPerformance.ts`, `src/lib/queries/overview.ts` |
-| 4. Single Customer Profile | `src/crm/brandStats.ts` + `src/app/(app)/brands/[id]/page.tsx` (Brand 360) |
+| 4. Single Customer Profile | Brands: `src/crm/brandStats.ts` + `src/app/(app)/brands/[id]/page.tsx` (Brand 360). Audience: `src/cdp/profiles.ts` (`audienceProfile`) + `/audience?member=U0108` |
+| Inbox | `src/inbox/*` (brief detector, thread + comment queries, suggested replies), `src/app/(app)/inbox/page.tsx` |
+| Finance | `src/crm/finance.ts`, `src/app/(app)/finance/page.tsx`, `src/app/api/finance/export/route.ts` (CSV) |
+| Ask AI | `src/ai/*` (facts, `Assistant` interface, offline `RuleAssistant`, optional `ClaudeAssistant`), `src/app/(app)/ask-ai/page.tsx` |
 | Outbound: Publisher | `src/publish/*` (types, per-platform rules, `PlatformPublisher` + `MockPublisher`, service), `src/app/api/media/route.ts` (upload), `src/app/(app)/content/page.tsx` |
 
 Stack: Next.js 16 (App Router, Server Components + Server Actions) · TypeScript · Tailwind v4 ·
@@ -112,6 +118,52 @@ Posting API, Instagram Graph API and YouTube Data API, and return it from `getPu
 
 ---
 
+## Inbox, Audience, Finance, Ask AI
+
+**Inbox** (`/inbox`)
+- *Brand messages*: one thread per brand (mock LINE OA / IG DM / email). Every inbound message goes
+  through a **brief detector** (`src/inbox/briefDetector.ts`, keyword rules behind a `BriefDetector`
+  interface, the same swap pattern as the comment classifier). It pulls out budget, platforms, timing and product.
+  **Create deal** turns a detected brief into a deal at *Brief* (value = budget, or the rate-card price
+  of the guessed deliverables) and logs it on the brand timeline. Replies come pre-drafted; *Mark as sent*
+  adds them to the thread and timeline (sending itself is simulated). Approved automation drafts to a
+  brand also show up in its thread.
+- *Audience comments*: last 14 days of consented comments, product questions first, filterable by
+  category, platform and status, each with a suggested Thai reply. *Copy & mark replied* / *Hide* only
+  change the status here; the creator posts the reply on the platform.
+
+**Audience** (`/audience`)
+- Followers per platform with 12-month growth, a follower growth chart, and age / gender / country
+  for any month and platform.
+- **Segments** from consented comments in the last 90 days (mostly-spam accounts excluded): superfans
+  (≥ 5 comments), content requesters, new this month, newsletter opt-ins (the only contactable group),
+  and “asked about <category>” per product category (the spiking one is flagged).
+- Click a segment to list its members, then a pseudo ID for the **audience profile** (single customer
+  profile): first/last seen, platforms, consent rows, interests, comment mix and comments. A person who
+  withdrew consent shows only that their data was excluded.
+- **Media kit** (`/print/media-kit`): built from live data every time you open it, ready to print or save as PDF for brands.
+
+**Finance** (`/finance`), with rules in `src/crm/finance.ts`
+- Income is **cash basis** (invoice `paid_at`). Outstanding = unpaid invoices; overdue = unpaid past
+  `due_at`. Expected = won deals not yet invoiced.
+- Monthly income chart, receivables ageing, income by brand and by platform (each invoice split across its
+  deliverables by rate-card price; bundles expand to their parts).
+- *Mark as paid* moves the deal to **Paid** (same as the pipeline, so tiers and the timeline update).
+- **Tax summary (estimate)**: gross, 3% withholding (typical for Thai company payers), net, plus a
+  CSV export per year for the accountant. It's an estimate, not tax advice.
+
+**Ask AI** (`/ask-ai`)
+- `gatherFacts()` reads everything the assistant may use from the DB: brands, offers, invoices, finance,
+  top content, product-question trends, audience totals and segment sizes, inbox threads, open tasks.
+  It contains **aggregates and fictional brand names only**: no comment text and no pseudo IDs.
+- **Offline by default:** `RuleAssistant` matches the question (English or Thai) to a topic and answers
+  from the facts, with **source links** to the pages the numbers come from.
+- **Optional Claude:** set `ANTHROPIC_API_KEY` (e.g. in `.env.local`) and restart. `ClaudeAssistant`
+  sends the same facts to `claude-opus-5-5` (low effort, server-side refusal fallback turned on) and asks
+  it to cite source ids. If the call fails, the app answers offline instead and says so.
+
+---
+
 ## Data model
 
 ```mermaid
@@ -137,6 +189,8 @@ erDiagram
   publications |o--o| contents : "becomes (when live)"
   deals ||--o{ publish_jobs : "sponsored post for"
   platforms ||--o{ import_runs : "data source log"
+  brands ||--o{ messages : "inbox thread"
+  messages |o--o| deals : "brief → deal"
 ```
 
 | Table | Purpose |
@@ -146,7 +200,7 @@ erDiagram
 | `content_metrics_daily` | daily views, likes, comments, shares, saves, profile_views, new_followers per post |
 | `audience_snapshots` + `audience_breakdown` | monthly followers + demographics per platform |
 | `pseudonyms` | salted hash of a handle → pseudo ID. **Real usernames are never stored.** |
-| `comments` | pseudo author, text, category, classifier name, `redacted` flag |
+| `comments` | pseudo author, text, category, classifier name, `redacted` flag, reply status / text (Inbox) |
 | `consents` | subject × purpose, lawful basis, status, withdrawn_at |
 | `brands`, `brand_contacts` | fictional brands/contacts |
 | `deals` | stage, value (THB), deliverables (rate-card codes), created/posted/closed dates |
@@ -156,6 +210,7 @@ erDiagram
 | `automation_rules`, `tasks`, `automation_runs` | rules config, drafted tasks (unique `dedupe_key`), run log |
 | `import_runs` | last import status per platform (Settings → Data Sources) |
 | `media_assets`, `publish_jobs`, `publications` | Publisher: uploaded file, the write-once post, and its per-platform caption/options/status |
+| `messages` | Inbox: brand thread messages (in/out, channel), detected brief (JSON), brief status, linked deal, source task |
 | `app_settings` | `story_date` |
 
 ---
@@ -211,6 +266,8 @@ a Posted deal to Report Sent). Re-running a date is idempotent (`tasks.dedupe_ke
 | Overdue invoice | **Pixel Pal** INV-0011, 35 days past due |
 | Product-question spike | **tech**, ~8× the baseline in the last 7 days |
 | +7 / +30 posts | **Nook Home** posted 2026-10-24 · **Glowberry** posted 2026-10-01 |
+| New briefs in the Inbox | **Kumo Audio** (Kumo Air 2, ฿40,000, TikTok + YouTube) · **Fresh Leaf** (Matcha Yuzu, ฿20,000, TikTok) |
+| Other unread messages | Pixel Pal promises to pay next week · Aroma Lab asks for a discount · Cloud Nine sent a sample · Zesty Kitchen is checking the quote |
 
 Running automations for 2026-10-31 → **7 tasks**: 1× +7 report, 1× +30 report + proposal,
 3× re-engagement, 1× invoice reminder, 1× tech spike alert. `npm run verify` asserts this.
@@ -282,25 +339,32 @@ the current UI language while the drafted message stays Thai.
 | Automation engine | **Real** rules + drafts; the 10:00 cron is **simulated** by a button + date picker; nothing is sent |
 | “AI Insight” | **Rule-based**, not an LLM |
 | Brands, contacts, deals, invoices | **Mocked** (fictional) |
-| Inbox, Audience, Finance, Ask AI pages | **Placeholders** describing what will go there |
+| Brand inbox messages | **Mocked** (seeded threads); LINE OA / IG DM / Gmail are **not connected**. Brief detection, deal creation, read state and reply logging are **real**; sending is **simulated** |
+| Comment replies | Status + reply text are **real** (stored); posting the reply to the platform is manual |
+| Audience segments, profiles, media kit | **Real** logic over the (mock) CDP data |
+| Finance | **Real** rollups over the (mock) invoices; the tax figures are an **estimate** (flat 3% withholding) |
+| Ask AI | **Real**, offline rule-based answers grounded in DB facts. **Optional real LLM** (Claude) when `ANTHROPIC_API_KEY` is set; not tested with a live key in this build |
 | Auth / multi-user | Not built (single local user) |
 
 ## Project structure
 
 ```
 src/
-  app/(app)/…         pages: overview, content (publisher), brands (list, [id], pipeline, quotes/new), automation, settings, placeholders
-  app/print/…         printable quote + performance report
-  app/actions.ts      server actions (pipeline moves, quotes, automation, CSV import, demo reset)
-  cdp/                adapters, ingest, pseudonymize, consent, classify, segments
-  crm/                rules, brandStats, contentPerformance, nextOffer, deliverables
+  app/(app)/…         pages: overview, content (publisher), inbox, audience, brands (list, [id], pipeline, quotes/new), automation, finance, ask-ai, settings
+  app/print/…         printable quote, performance report, media kit
+  app/api/…           media upload, finance CSV export
+  app/actions.ts      server actions (pipeline, quotes, automation, inbox, finance, Ask AI, CSV import, demo reset)
+  ai/                 Ask AI: facts, Assistant interface, rule-based + Claude engines
+  inbox/              brief detector, inbox queries, suggested replies
+  cdp/                adapters, ingest, pseudonymize, consent, classify, segments, profiles (audience segments + profile)
+  crm/                rules, brandStats, contentPerformance, nextOffer, deliverables, finance
   automation/         engine + rules/* + present.ts (task text per UI language)
   publish/            publisher types, platform rules, MockPublisher, service
   db/                 Drizzle schema + client
   seed/               story fixtures + seedDatabase()
   lib/                config, constants, dates, format, i18n (en/th + server/client helpers), queries
 scripts/              seed.ts, verify-story.ts
-drizzle/              SQL migration
+drizzle/              SQL migrations
 data/samples/         sample CSV exports
 data/uploads/         publisher media (gitignored, cleared by npm run seed)
 ```
