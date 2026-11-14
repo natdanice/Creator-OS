@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { Download } from "lucide-react";
-import { getDb } from "@/db/client";
-import { AGEING, financeData, INCOME_BUCKETS, type InvoiceStatus } from "@/crm/finance";
-import { getStoryDate } from "@/lib/queries/settings";
+import { AGEING, INCOME_BUCKETS, type InvoiceStatus } from "@/crm/finance";
+import { getFinance } from "@/lib/api";
 import { Card, PageHeader, Pill, ShareBar, StatStrip, StatTile } from "@/components/ui";
 import { MonthlyIncomeChart } from "@/components/charts/MonthlyIncomeChart";
 import { MarkPaidButton } from "@/components/finance/MarkPaidButton";
@@ -24,9 +23,7 @@ export default async function FinancePage({ searchParams }: { searchParams: Prom
   const { t, date, dateShort } = await getI18n();
   const { f: raw } = await searchParams;
   const filter: Filter = FILTERS.includes(raw as Filter) ? (raw as Filter) : "all";
-  const db = getDb();
-  const today = getStoryDate(db);
-  const d = financeData(db, today);
+  const { finance: d } = await getFinance(); // computed by the Go API (backend/)
   const k = d.kpis;
   const change = k.incomePrevYtd ? k.incomeYtd / k.incomePrevYtd - 1 : null;
   const rows = d.rows.filter((r) => (filter === "all" ? true : filter === "unpaid" ? r.status !== "paid" : r.status === filter));

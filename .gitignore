@@ -12,3 +12,7 @@ data/uploads/
 
 # Real data stays on this computer only
 data/import/
+
+# Local run state (pid files, logs) and the compiled API
+/.run/
+/backend/bin/

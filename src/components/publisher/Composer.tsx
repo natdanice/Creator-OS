@@ -4,6 +4,7 @@
  * → live validation + preview → one click publishes (or schedules) to every enabled platform.
  */
 import { useMemo, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { AlertTriangle, CalendarClock, CheckCircle2, CircleAlert, ImageIcon, Send, Upload, Video } from "lucide-react";
 import { publishPostAction } from "@/app/actions";
 import { CONTENT_TYPES, PRODUCT_CATEGORIES, type ContentType, type ProductCategory } from "@/lib/constants";
@@ -13,6 +14,7 @@ import { btn, PlatformTag, Pill } from "@/components/ui";
 import { LIMITS, effectiveOptions, enabledPlatforms, finalCaption, fmtDuration, suggestTitle, validatePlatform, validateSchedule, type Issue } from "@/publish/rules";
 import { DEFAULT_OPTIONS, PUBLISH_PLATFORMS, type ComposeDraft, type MediaInfo, type PlatformId, type PlatformOptionsMap } from "@/publish/types";
 import type { CreateResult } from "@/publish/service";
+import type { PublishTarget } from "@/publish/publishers";
 
 export interface DealOption {
   id: number;
@@ -28,7 +30,13 @@ interface UploadedMedia extends MediaInfo {
   url: string;
 }
 
-const newDraft = (): ComposeDraft => ({
+/** TikTok: start on a privacy the account may use (unaudited apps only allow "Only me"). */
+const tiktokDefaults = (targets: Record<PlatformId, PublishTarget>) => {
+  const allowed = targets.tiktok.tiktokPrivacy;
+  return { ...DEFAULT_OPTIONS.tiktok, privacy: allowed && !allowed.includes("public") && allowed[0] ? allowed[0] : DEFAULT_OPTIONS.tiktok.privacy };
+};
+
+const newDraft = (targets: Record<PlatformId, PublishTarget>): ComposeDraft => ({
   mediaId: null,
   caption: "",
   hashtags: "",
@@ -39,7 +47,7 @@ const newDraft = (): ComposeDraft => ({
   addAdTag: true,
   scheduledAt: null,
   platforms: {
-    tiktok: { enabled: true, customCaption: null, options: { ...DEFAULT_OPTIONS.tiktok } },
+    tiktok: { enabled: true, customCaption: null, options: tiktokDefaults(targets) },
     instagram: { enabled: true, customCaption: null, options: { ...DEFAULT_OPTIONS.instagram } },
     youtube: { enabled: true, customCaption: null, options: { ...DEFAULT_OPTIONS.youtube } },
   },
@@ -78,10 +86,10 @@ function Check({ checked, onChange, children, disabled }: { checked: boolean; on
   );
 }
 
-export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
+export function Composer({ deals, now, live, targets }: { deals: DealOption[]; now: string; live: boolean; targets: Record<PlatformId, PublishTarget> }) {
   const { t } = useI18n();
   const P = t.publisher;
-  const [draft, setDraft] = useState<ComposeDraft>(newDraft);
+  const [draft, setDraft] = useState<ComposeDraft>(() => newDraft(targets));
   const [media, setMedia] = useState<UploadedMedia | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
@@ -147,7 +155,8 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
   }, [draft, media]);
   const scheduleIssues = validateSchedule(draft, now);
   const hasErrors = enabled.some((p) => issues[p].some((i) => i.level === "error")) || scheduleIssues.length > 0;
-  const blocker = !media ? P.noMedia : enabled.length === 0 ? P.noPlatform : hasErrors ? P.fixErrors : null;
+  const notReady = enabled.some((p) => targets[p].state !== "ready" && targets[p].state !== "mock");
+  const blocker = !media ? P.noMedia : enabled.length === 0 ? P.noPlatform : notReady ? P.notReady : hasErrors ? P.fixErrors : null;
 
   const issueText = (p: PlatformId | null, i: Issue) => fmt(P.v[i.code], { ...(i.vars ?? {}), platform: p ? t.platforms[p] : "" });
 
@@ -159,7 +168,7 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
     });
 
   const reset = () => {
-    setDraft(newDraft());
+    setDraft(newDraft(targets));
     setMedia(null);
     setTitleTouched(false);
     setResult(null);
@@ -310,8 +319,20 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
             const eff = effectiveOptions(draft, p);
             return (
               <article key={p} className={`rounded-xl border bg-card transition-opacity ${pd.enabled ? "border-line" : "border-dashed border-line opacity-60"}`}>
-                <header className="flex items-center justify-between border-b border-line px-5 py-3">
-                  <PlatformTag id={p} />
+                <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-3">
+                  <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                    <PlatformTag id={p} />
+                    {targets[p].state === "ready" && <span className="truncate text-xs text-good">{fmt(P.target.ready, { account: targets[p].account ?? "" })}</span>}
+                    {targets[p].state !== "ready" && targets[p].state !== "mock" && (
+                      <span className="text-xs text-warn">
+                        {P.target[targets[p].state as "not_connected"]}{" "}
+                        <Link href="/settings#connections" className="font-medium underline">
+                          {P.settingsLink}
+                        </Link>
+                      </span>
+                    )}
+                    {targets[p].warning && <span className="text-xs text-bad">{targets[p].warning}</span>}
+                  </div>
                   <button
                     role="switch"
                     aria-checked={pd.enabled}
@@ -358,12 +379,17 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
                         <label className="block">
                           <span className={label}>{P.privacy}</span>
                           <select value={draft.platforms.tiktok.options.privacy} onChange={(e) => setOpt("tiktok", { privacy: e.target.value as "public" })} className={field}>
-                            {(["public", "friends", "private"] as const).map((v) => (
-                              <option key={v} value={v}>
-                                {P.privacyOpts[v]}
-                              </option>
-                            ))}
+                            {(["public", "friends", "private"] as const).map((v) => {
+                              const blocked = !!targets.tiktok.tiktokPrivacy && !targets.tiktok.tiktokPrivacy.includes(v);
+                              return (
+                                <option key={v} value={v} disabled={blocked}>
+                                  {P.privacyOpts[v]}
+                                  {blocked ? ` (${P.notAllowedYet})` : ""}
+                                </option>
+                              );
+                            })}
                           </select>
+                          {targets.tiktok.tiktokPrivacy?.length === 1 && targets.tiktok.tiktokPrivacy[0] === "private" && <span className="mt-1 block text-[11px] text-subtle">{P.tiktokOnlyMe}</span>}
                         </label>
                         <div className="space-y-1.5 pt-1">
                           <Check checked={draft.platforms.tiktok.options.allowComments} onChange={(v) => setOpt("tiktok", { allowComments: v })}>
@@ -406,6 +432,7 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
                         <label className="block">
                           <span className={label}>{P.location}</span>
                           <input value={draft.platforms.instagram.options.location} onChange={(e) => setOpt("instagram", { location: e.target.value })} className={field} />
+                          {live && <span className="mt-1 block text-[11px] text-subtle">{P.igLocationHint}</span>}
                         </label>
                         <div className="space-y-1.5 md:col-span-2">
                           {draft.platforms.instagram.options.format === "reel" && (
@@ -416,6 +443,7 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
                           <Check checked={(eff as PlatformOptionsMap["instagram"]).paidPartnership} disabled={draft.sponsored} onChange={(v) => setOpt("instagram", { paidPartnership: v })}>
                             {P.paidPartnership}
                           </Check>
+                          {live && (eff as PlatformOptionsMap["instagram"]).paidPartnership && <p className="text-[11px] text-warn">{P.igPaidNote}</p>}
                         </div>
                       </div>
                     )}
@@ -431,6 +459,7 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
                               </option>
                             ))}
                           </select>
+                          {live && <span className="mt-1 block text-[11px] text-subtle">{P.ytShortsAuto}</span>}
                         </label>
                         <label className="block">
                           <span className={label}>{P.visibility}</span>
@@ -571,7 +600,7 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
             </label>
           ) : (
             <p className="text-[11px] text-subtle">
-              {P.nowHint}: {now.slice(0, 10)}
+              {live ? P.nowHintLive : `${P.nowHint}: ${now.slice(0, 10)}`}
             </p>
           )}
           {scheduleIssues.map((i, k) => (
@@ -585,7 +614,7 @@ export function Composer({ deals, now }: { deals: DealOption[]; now: string }) {
             {pending ? P.publishing : fmt(draft.scheduledAt ? P.scheduleBtn : P.publishBtn, { n: enabled.length })}
           </button>
           {blocker && !pending && <p className="text-center text-xs text-muted">{blocker}</p>}
-          <p className="text-[11px] leading-relaxed text-subtle">{P.mockNote}</p>
+          <p className="text-[11px] leading-relaxed text-subtle">{live ? P.liveNote : P.mockNote}</p>
         </section>
       </aside>
     </div>

@@ -106,13 +106,15 @@ export default async function MediaKitPage() {
         <h2 className="mb-3 text-lg font-medium">{t.mediaKit.topContent}</h2>
         <ol className="space-y-2 text-sm">
           {ov.top.slice(0, 5).map((c, i) => (
-            <li key={c.id} className="flex items-baseline justify-between gap-4 border-b border-line pb-2">
+            <li key={c.key} className="flex items-baseline justify-between gap-4 border-b border-line pb-2">
               <span className="min-w-0">
                 <span className="tabular mr-2 text-muted">{i + 1}.</span>
                 {c.title}
-                <span className="ml-2">
-                  <PlatformTag id={c.platformId} />
-                </span>
+                {c.posts.map((p) => (
+                  <span key={p.id} className="ml-2">
+                    <PlatformTag id={p.platformId} />
+                  </span>
+                ))}
               </span>
               <span className="tabular shrink-0 text-ink-2">
                 {num(c.views)} · ER {pct(c.er)}

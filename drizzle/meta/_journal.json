@@ -36,6 +36,13 @@
       "when": 1793877837901,
       "tag": "0004_account_daily",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794623332258,
+      "tag": "0005_publish_live",
+      "breakpoints": true
     }
   ]
 }

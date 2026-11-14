@@ -1,8 +1,5 @@
-import { desc, eq, ne } from "drizzle-orm";
 import { ShieldCheck } from "lucide-react";
-import { getDb } from "@/db/client";
-import { automationRules, automationRuns, tasks } from "@/db/schema";
-import { getStoryDate } from "@/lib/queries/settings";
+import { getAutomation } from "@/lib/api";
 import { RuleToggle, RunPanel, TaskCard } from "@/components/automation";
 import { Card, PageHeader, Pill } from "@/components/ui";
 import { fmt } from "@/lib/i18n";
@@ -17,14 +14,9 @@ export async function generateMetadata() {
 export default async function AutomationPage() {
   const i18n = await getI18n();
   const { t } = i18n;
-  const db = getDb();
-  const today = getStoryDate(db);
-  const rules = db.select().from(automationRules).all();
+  const { today, rules, open, done, runs } = await getAutomation();
   const nameOf = (id: string) => ruleName(i18n, id, rules.find((r) => r.id === id)?.name ?? id);
   const meta = (id: string) => t.ruleMeta[id as "pq_spike"];
-  const open = db.select().from(tasks).where(eq(tasks.status, "open")).orderBy(desc(tasks.forDate), tasks.id).all();
-  const done = db.select().from(tasks).where(ne(tasks.status, "open")).orderBy(desc(tasks.completedAt)).all();
-  const runs = db.select().from(automationRuns).orderBy(desc(automationRuns.id)).limit(8).all();
 
   return (
     <>

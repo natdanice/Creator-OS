@@ -12,6 +12,7 @@ export async function proxy(req: NextRequest) {
 }
 
 export const config = {
-  // Open: the login page, Next.js assets, the icon, the cron job (own secret) and platform webhooks (own signatures).
-  matcher: ["/((?!login|_next/|icon\\.svg|favicon\\.ico|api/cron/|api/webhooks/).*)"],
+  // Open: the login page, Next.js assets, the icon, the cron jobs (own secret), platform webhooks (own signatures)
+  // and signed media links that platforms fetch when publishing (own expiring token).
+  matcher: ["/((?!login|_next/|icon\\.svg|favicon\\.ico|api/cron/|api/webhooks/|api/media/public/).*)"],
 };

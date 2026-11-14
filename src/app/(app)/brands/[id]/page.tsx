@@ -4,14 +4,9 @@
  */
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { desc, eq, inArray } from "drizzle-orm";
 import { ArrowLeft, FileText, Sparkles } from "lucide-react";
-import { getDb } from "@/db/client";
-import { activities, invoices, rateCard } from "@/db/schema";
-import { computeBrandStats } from "@/crm/brandStats";
-import { contentPerformance, sponsoredContentIdsForDeals } from "@/crm/contentPerformance";
-import { recommendNextOffer } from "@/crm/nextOffer";
-import { getStoryDate } from "@/lib/queries/settings";
+import { getBrand360 } from "@/lib/api";
+import { presentOffer } from "@/crm/presentOffer";
 import { ButtonLink, Card, PageHeader, Pill, PlatformTag, StatStrip, StatTile, TierBadge } from "@/components/ui";
 import { baht, num, pct } from "@/lib/format";
 import { diffDays } from "@/lib/dates";
@@ -21,18 +16,12 @@ import { getI18n } from "@/lib/i18n/server";
 export default async function Brand360({ params }: { params: Promise<{ id: string }> }) {
   const { t, date, dateShort } = await getI18n();
   const { id } = await params;
-  const db = getDb();
-  const today = getStoryDate(db);
-  const s = computeBrandStats(db, today).find((x) => x.brand.id === Number(id));
-  if (!s) notFound();
-
-  const dealIds = s.deals.map((d) => d.id);
-  const perf = contentPerformance(db, sponsoredContentIdsForDeals(db, dealIds), today).sort((a, b) => (a.postedAt < b.postedAt ? 1 : -1));
-  const offer = recommendNextOffer(db, s, today, perf, undefined, t);
-  const invs = dealIds.length ? db.select().from(invoices).where(inArray(invoices.dealId, dealIds)).all() : [];
-  const acts = db.select().from(activities).where(eq(activities.brandId, s.brand.id)).orderBy(desc(activities.occurredAt)).all().filter((a) => a.occurredAt.slice(0, 10) <= today);
-  const cards = db.select().from(rateCard).all();
-  const cardName = (code: string) => cards.find((c) => c.code === code)?.name ?? code;
+  const res = await getBrand360(Number(id));
+  if (!res) notFound();
+  const { today, brand } = res;
+  const { stats: s, performance: perf, invoices: invs, activities: acts } = brand;
+  const offer = { ...brand.offer, ...presentOffer(t, brand.offer) };
+  const cardName = (code: string) => brand.rateCard.find((c) => c.code === code)?.name ?? code;
   const dealTitle = (dealId: number | null) => s.deals.find((d) => d.id === dealId)?.title ?? "";
 
   const kpis = [

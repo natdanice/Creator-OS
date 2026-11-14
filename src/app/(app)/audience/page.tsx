@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { FileText, ShieldCheck, X } from "lucide-react";
-import { getDb } from "@/db/client";
 import type { ProductCategory } from "@/db/schema";
-import { audienceProfile, audienceSegments, availableMonths, demographics, followerSeries, latestSplitMonth, segmentMembers, SEGMENT_WINDOW_DAYS, SUPERFAN_MIN_COMMENTS, type SegmentId } from "@/cdp/profiles";
-import { productQuestionSpikes } from "@/cdp/segments";
-import { PLATFORM_KEYS, type PlatformKey } from "@/lib/queries/overview";
-import { getStoryDate } from "@/lib/queries/settings";
+import { SEGMENT_WINDOW_DAYS, SUPERFAN_MIN_COMMENTS, type SegmentId } from "@/cdp/profiles";
+import { getAudience, getAudienceMember, getSegmentMembers } from "@/lib/api";
+import { PLATFORM_KEYS } from "@/lib/queries/overview";
 import { ButtonLink, Card, PageHeader, Pill, PlatformTag, ShareBar, StatStrip, StatTile } from "@/components/ui";
 import { FollowerGrowthChart } from "@/components/charts/FollowerGrowthChart";
 import { num, signedPct } from "@/lib/format";
@@ -32,23 +30,14 @@ export default async function AudiencePage({ searchParams }: { searchParams: Pro
   const i18n = await getI18n();
   const { t, date } = i18n;
   const params = await searchParams;
-  const db = getDb();
-  const today = getStoryDate(db);
-  const months = availableMonths(db, today);
-  const month = params.month && months.includes(params.month) ? params.month : months[0];
-  const platform: PlatformKey = PLATFORM_KEYS.includes(params.p as PlatformKey) ? (params.p as PlatformKey) : "tiktok";
-  const series = followerSeries(db, today);
+  const { months, month, platform, series, splitMonth, demographics: demo, segments: seg, spikingSegments } = await getAudience({ month: params.month, platform: params.p });
   const last = series.at(-1);
   const yearAgo = series.at(-13);
-  // If the chosen month has no split for this platform, show the latest month that does (and say which).
-  const splitMonth = month ? latestSplitMonth(db, platform, month) : null;
-  const demo = splitMonth ? demographics(db, splitMonth).find((d) => d.platformId === platform) : undefined;
-  const seg = audienceSegments(db, today);
-  const spikes = new Set(productQuestionSpikes(db, today).filter((s) => s.isSpike).map((s) => `askers_${s.category}`));
+  const spikes = new Set(spikingSegments);
   const segmentIds = seg.summaries.map((s) => s.id);
   const segment = segmentIds.includes(params.segment as SegmentId) ? (params.segment as SegmentId) : null;
-  const members = segment ? segmentMembers(db, today, segment, 30) : null;
-  const profile = params.member ? audienceProfile(db, params.member, today) : null;
+  const members = segment ? await getSegmentMembers(segment, 30) : null;
+  const profile = params.member ? await getAudienceMember(params.member) : null;
 
   const href = (patch: Partial<Params>, hash = "") => {
     const q = new URLSearchParams(Object.entries({ ...params, ...patch }).filter(([, v]) => v) as [string, string][]);
@@ -90,7 +79,7 @@ export default async function AudiencePage({ searchParams }: { searchParams: Pro
           right={
             <form action="/audience" className="flex items-center gap-2">
               {params.p && <input type="hidden" name="p" value={params.p} />}
-              <select name="month" defaultValue={month} aria-label={t.audience.month} className="rounded-md border border-line bg-white px-2 py-1 text-xs">
+              <select name="month" defaultValue={month ?? undefined} aria-label={t.audience.month} className="rounded-md border border-line bg-white px-2 py-1 text-xs">
                 {months.map((m) => (
                   <option key={m} value={m}>
                     {m}
@@ -207,7 +196,7 @@ function DemoGroup({ title, rows, color }: { title: string; rows: { label: strin
   );
 }
 
-function ProfileCard({ i18n, profile, closeHref }: { i18n: I18n; profile: ReturnType<typeof audienceProfile>; closeHref: string }) {
+function ProfileCard({ i18n, profile, closeHref }: { i18n: I18n; profile: Awaited<ReturnType<typeof getAudienceMember>>; closeHref: string }) {
   const { t, date } = i18n;
   const close = (
     <Link href={closeHref} className="inline-flex items-center gap-1 text-xs text-muted hover:text-ink">

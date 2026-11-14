@@ -25,6 +25,7 @@ export type IssueCode =
   | "videoTooLong"
   | "shortsNotVertical"
   | "storyCaptionHidden"
+  | "brandedPrivate"
   | "scheduleInPast";
 
 export interface Issue {
@@ -77,6 +78,9 @@ export function validatePlatform(draft: ComposeDraft, platform: PlatformId, medi
   if (platform === "tiktok") {
     if (caption.length > LIMITS.tiktok.caption) issues.push({ level: "error", code: "captionTooLong", vars: { n: caption.length, max: LIMITS.tiktok.caption } });
     tooLong(LIMITS.tiktok.maxVideoSec, "");
+    const o = effectiveOptions(draft, "tiktok");
+    // TikTok rule: branded content can't be "Only me".
+    if (o.brandedContent && o.privacy === "private") issues.push({ level: "error", code: "brandedPrivate" });
   }
 
   if (platform === "instagram") {

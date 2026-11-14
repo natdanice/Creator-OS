@@ -6,12 +6,15 @@ import { bearer, form, getJson } from "@/connect/http";
 import { OAUTH, redirectUri, type OAuthProvider } from "@/connect/providers";
 import { saveConnection, type TokenSet } from "@/connect/store";
 
-type Done = { account: string; tokens: TokenSet; meta?: Record<string, string> };
+/** `scopes` = what the platform says was granted (users can untick permissions), when it says. */
+type Done = { account: string; tokens: TokenSet; meta?: Record<string, string>; scopes?: string };
+
+const scopeList = (s: string | string[] | undefined) => (Array.isArray(s) ? s.join(" ") : s?.split(/[\s,]+/).filter(Boolean).join(" ")) || undefined;
 
 async function exchange(o: OAuthProvider, code: string): Promise<Done> {
   const base = { [o.clientIdParam]: process.env[o.clientIdEnv]!, client_secret: process.env[o.clientSecretEnv]!, grant_type: "authorization_code", redirect_uri: redirectUri(o.id), code };
   if (o.id === "google") {
-    const r = await getJson<{ access_token: string; refresh_token?: string; expires_in: number }>(o.tokenUrl, form(base));
+    const r = await getJson<{ access_token: string; refresh_token?: string; expires_in: number; scope?: string }>(o.tokenUrl, form(base));
     const profile = await getJson<{ emailAddress: string }>("https://gmail.googleapis.com/gmail/v1/users/me/profile", bearer(r.access_token)).catch(() => null);
     const ch = await getJson<{ items?: { id: string; snippet: { title: string } }[] }>("https://www.googleapis.com/youtube/v3/channels?part=snippet&mine=true", bearer(r.access_token)).catch(() => null);
     const channel = ch?.items?.[0];
@@ -19,19 +22,28 @@ async function exchange(o: OAuthProvider, code: string): Promise<Done> {
       account: [channel?.snippet.title, profile?.emailAddress].filter(Boolean).join(" · ") || "Google",
       tokens: { accessToken: r.access_token, refreshToken: r.refresh_token, expiresIn: r.expires_in },
       meta: { email: profile?.emailAddress ?? "", channelId: channel?.id ?? "", channelTitle: channel?.snippet.title ?? "" },
+      scopes: scopeList(r.scope),
     };
   }
   if (o.id === "instagram") {
-    const short = await getJson<{ access_token: string; user_id: number | string }>(o.tokenUrl, form(base));
+    // Meta documents both a flat body and one wrapped in `data: [...]`; accept either.
+    type Short = { access_token: string; user_id: number | string; permissions?: string | string[] };
+    const raw = await getJson<Short | { data: Short[] }>(o.tokenUrl, form(base));
+    const short = "data" in raw ? raw.data[0] : raw;
     const long = await getJson<{ access_token: string; expires_in: number }>(
       `https://graph.instagram.com/access_token?grant_type=ig_exchange_token&client_secret=${encodeURIComponent(process.env[o.clientSecretEnv]!)}&access_token=${encodeURIComponent(short.access_token)}`,
     );
     const me = await getJson<{ username: string; user_id?: string }>(`https://graph.instagram.com/me?fields=user_id,username&access_token=${encodeURIComponent(long.access_token)}`);
-    return { account: `@${me.username}`, tokens: { accessToken: long.access_token, expiresIn: long.expires_in }, meta: { userId: String(me.user_id ?? short.user_id), username: me.username } };
+    return { account: `@${me.username}`, tokens: { accessToken: long.access_token, expiresIn: long.expires_in }, meta: { userId: String(me.user_id ?? short.user_id), username: me.username }, scopes: scopeList(short.permissions) };
   }
-  const r = await getJson<{ access_token: string; refresh_token: string; expires_in: number; open_id: string }>(o.tokenUrl, form(base));
-  const me = await getJson<{ data: { user: { display_name?: string } } }>("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name", bearer(r.access_token)).catch(() => null);
-  return { account: me?.data.user.display_name ?? "TikTok", tokens: { accessToken: r.access_token, refreshToken: r.refresh_token, expiresIn: r.expires_in }, meta: { openId: r.open_id } };
+  const r = await getJson<{ access_token: string; refresh_token: string; expires_in: number; open_id: string; scope?: string }>(o.tokenUrl, form(base));
+  const me = await getJson<{ data: { user: { display_name?: string; username?: string } } }>("https://open.tiktokapis.com/v2/user/info/?fields=open_id,display_name,username", bearer(r.access_token)).catch(() => null);
+  return {
+    account: me?.data.user.display_name ?? "TikTok",
+    tokens: { accessToken: r.access_token, refreshToken: r.refresh_token, expiresIn: r.expires_in },
+    meta: { openId: r.open_id, username: me?.data.user.username ?? "" },
+    scopes: scopeList(r.scope),
+  };
 }
 
 export async function GET(req: Request, { params }: { params: Promise<{ provider: string }> }) {
@@ -47,7 +59,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   if (!expected || url.searchParams.get("state") !== expected) return back(`connectError=${encodeURIComponent("Login expired or was opened in another browser — try again")}`);
   try {
     const done = await exchange(o, url.searchParams.get("code") ?? "");
-    saveConnection(getDb(), o.id, done.account, done.tokens, done.meta, o.scopes.join(" "));
+    saveConnection(getDb(), o.id, done.account, done.tokens, done.meta, done.scopes ?? o.scopes.join(" "));
     revalidatePath("/", "layout");
     return back(`connected=${o.id}`);
   } catch (e) {

@@ -1,8 +1,9 @@
-import { and, desc, eq, gte, lte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import type { DB } from "@/db/client";
 import { accountDaily, comments, contentMetricsDaily, contents, platforms, tasks } from "@/db/schema";
 import { ANALYTICS_OK } from "@/cdp/consent";
 import { productQuestionSpikes } from "@/cdp/segments";
+import { contentGroups } from "@/cdp/crossPost";
 import { engagementRate } from "@/crm/rules";
 import { addDays, daysBetween, windowEnding } from "@/lib/dates";
 
@@ -112,8 +113,8 @@ export function overviewData(db: DB, today: string, range: number) {
     return row as { date: string } & Record<PlatformKey, number>;
   });
 
-  // Top content in the window
-  const top = db
+  // Top content in the window: one row per video, with its posts on every platform added together
+  const posts = db
     .select({
       id: contents.id,
       title: contents.title,
@@ -133,10 +134,8 @@ export function overviewData(db: DB, today: string, range: number) {
     .innerJoin(contents, eq(contents.id, contentMetricsDaily.contentId))
     .where(and(gte(contentMetricsDaily.date, start), lte(contentMetricsDaily.date, end)))
     .groupBy(contents.id)
-    .orderBy(desc(sql`sum(${contentMetricsDaily.views})`))
-    .limit(8)
-    .all()
-    .map((r) => ({ ...r, er: engagementRate(r) }));
+    .all();
+  const { top, pieces } = topContent(db, posts);
 
   return {
     window: { start, end, prevStart, prevEnd },
@@ -151,9 +150,78 @@ export function overviewData(db: DB, today: string, range: number) {
     },
     series,
     top,
+    pieces,
     insight: insightData(db, start, end),
     spikes: productQuestionSpikes(db, today).filter((s) => s.isSpike),
   };
+}
+
+type PostRow = {
+  id: number;
+  title: string;
+  platformId: string;
+  type: (typeof contents.$inferSelect)["type"];
+  isSponsored: boolean;
+  dealId: number | null;
+  postedAt: string;
+  views: number;
+  likes: number;
+  comments: number;
+  shares: number;
+  saves: number;
+  newFollowers: number;
+};
+
+export interface TopContent {
+  key: string;
+  /** Caption of the post with the most views. */
+  title: string;
+  /** Every platform's caption, for the tooltip. */
+  titles: string[];
+  type: PostRow["type"];
+  isSponsored: boolean;
+  postedAt: string; // first post
+  posts: { id: number; platformId: PlatformKey; views: number }[]; // most views first
+  views: number;
+  newFollowers: number;
+  er: number;
+}
+
+/**
+ * Groups the window's posts into videos (src/cdp/crossPost.ts: the same video on several platforms
+ * is one piece), adds up their numbers and ranks by total views. Members of a video whose post had
+ * no activity in the window still show, with 0 views, so the video stays complete.
+ */
+function topContent(db: DB, rows: PostRow[], limit = 8): { top: TopContent[]; pieces: { videos: number; posts: number } } {
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const groups = contentGroups(db).filter((g) => g.some((id) => byId.has(id)));
+  const missing = groups.flat().filter((id) => !byId.has(id));
+  if (missing.length) {
+    for (const c of db.select().from(contents).where(inArray(contents.id, missing)).all()) {
+      byId.set(c.id, { ...c, views: 0, likes: 0, comments: 0, shares: 0, saves: 0, newFollowers: 0 });
+    }
+  }
+  const top = groups
+    .map((g): TopContent => {
+      const members = g.map((id) => byId.get(id)!).sort((a, b) => b.views - a.views || a.postedAt.localeCompare(b.postedAt));
+      const sum = (k: "views" | "likes" | "comments" | "shares" | "saves" | "newFollowers") => members.reduce((n, m) => n + (m[k] ?? 0), 0);
+      const first = [...members].sort((a, b) => a.postedAt.localeCompare(b.postedAt))[0];
+      return {
+        key: members.map((m) => m.id).join("-"),
+        title: members[0].title,
+        titles: members.map((m) => m.title),
+        type: members[0].type,
+        isSponsored: members.some((m) => m.isSponsored),
+        postedAt: first.postedAt,
+        posts: members.map((m) => ({ id: m.id, platformId: m.platformId as PlatformKey, views: m.views })),
+        views: sum("views"),
+        newFollowers: sum("newFollowers"),
+        er: engagementRate({ views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares"), saves: sum("saves") }),
+      };
+    })
+    .sort((a, b) => b.views - a.views)
+    .slice(0, limit);
+  return { top, pieces: { videos: groups.length, posts: groups.flat().length } };
 }
 
 /**

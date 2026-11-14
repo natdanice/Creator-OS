@@ -1,14 +1,13 @@
-import { getDb } from "@/db/client";
-import { invoicesCsv, listInvoices } from "@/crm/finance";
-import { getStoryDate } from "@/lib/queries/settings";
+/** The yearly income CSV for the accountant. Built by the Go API; this route only passes it on. */
+import { apiFetch, ApiError } from "@/lib/api";
 
-/** Paid invoices of one year as CSV (for the accountant / tax filing). */
 export async function GET(req: Request) {
-  const db = getDb();
-  const today = getStoryDate(db);
-  const year = new URL(req.url).searchParams.get("year") ?? today.slice(0, 4);
-  if (!/^\d{4}$/.test(year)) return new Response("bad year", { status: 400 });
-  return new Response(invoicesCsv(listInvoices(db, today), year), {
-    headers: { "content-type": "text/csv; charset=utf-8", "content-disposition": `attachment; filename="creator-os-income-${year}.csv"` },
-  });
+  const year = new URL(req.url).searchParams.get("year");
+  if (year !== null && !/^\d{4}$/.test(year)) return new Response("bad year", { status: 400 });
+  try {
+    const res = await apiFetch(`/api/v1/finance/export${year ? `?year=${year}` : ""}`);
+    return new Response(res.body, { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": res.headers.get("Content-Disposition") ?? "attachment" } });
+  } catch (e) {
+    return new Response(e instanceof Error ? e.message : "API error", { status: e instanceof ApiError ? e.status : 502 });
+  }
 }

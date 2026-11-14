@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
-import { Bot, Building2, Inbox, Languages, LayoutDashboard, Menu, Send, Settings, Sparkles, Users, Wallet, X } from "lucide-react";
+import { Bot, Building2, Inbox, Languages, LayoutDashboard, Menu, Send, Settings, Sparkles, Upload, Users, Wallet, X } from "lucide-react";
 import { useI18n } from "@/lib/i18n/client";
 import { setLocaleAction } from "@/app/actions";
 
@@ -25,8 +25,9 @@ export function Sidebar({ storyDate, inboxUnread }: { storyDate: string; inboxUn
   const automation: Item = { href: "/automation", label: t.nav.automation, icon: Bot };
   const finance: Item = { href: "/finance", label: t.nav.finance, icon: Wallet };
   const askAi: Item = { href: "/ask-ai", label: t.nav.askAi, icon: Sparkles };
+  const importData: Item = { href: "/import", label: t.nav.importData, icon: Upload };
   const settings: Item = { href: "/settings", label: t.nav.settings, icon: Settings };
-  const ITEMS = [overview, publisher, inbox, audience, brands, automation, finance, askAi];
+  const ITEMS = [overview, importData, publisher, inbox, audience, brands, automation, finance, askAi];
   // Phone tabs use short labels so Thai names fit.
   const TABS: Item[] = [
     { ...overview, label: t.navTabs.overview },
@@ -34,7 +35,7 @@ export function Sidebar({ storyDate, inboxUnread }: { storyDate: string; inboxUn
     { ...publisher, label: t.navTabs.content },
     { ...brands, label: t.navTabs.brands },
   ];
-  const MORE = [audience, automation, finance, askAi, settings];
+  const MORE = [importData, audience, automation, finance, askAi, settings];
 
   const active = (href: string) => (href === "/" ? path === "/" : path.startsWith(href));
   const badge = (n?: number) => (n ? <span className="tabular rounded-full bg-accent px-1.5 text-[11px] font-medium leading-[18px] text-white">{n}</span> : null);

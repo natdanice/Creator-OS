@@ -3,7 +3,8 @@
  *   createJob  → validates every enabled platform, stores one publish_job + one publication per platform
  *   publishJob → sends each publication through its PlatformPublisher; successful posts become
  *                `contents` rows (so they flow into the CDP), and a linked deal moves to Posted
- *   publishDue → called by the daily 10:00 automation run for scheduled jobs that are due
+ *   publishDue → publishes scheduled jobs that are due (daily job, /api/cron/publish, or the Automation page)
+ *   retryJob   → sends the failed platforms of a job again (already-published ones are left alone)
  */
 import path from "node:path";
 import { and, eq, inArray, isNotNull, lte } from "drizzle-orm";
@@ -11,8 +12,9 @@ import type { DB } from "@/db/client";
 import { activities, contents, deals, mediaAssets, publications, publishJobs, type PublishStatus } from "@/db/schema";
 import { stageAtLeast } from "@/crm/rules";
 import { dataT, fmt } from "@/lib/i18n";
-import { getPublisher } from "./MockPublisher";
-import { stamp } from "@/lib/clock";
+import { getPublisher } from "./publishers";
+import { bangkokNow, stamp } from "@/lib/clock";
+import { IS_LIVE } from "@/lib/config";
 import { effectiveOptions, enabledPlatforms, finalCaption, validatePlatform, validateSchedule, type Issue } from "./rules";
 import type { ComposeDraft, MediaInfo, PlatformId } from "./types";
 
@@ -81,7 +83,20 @@ export async function createJob(db: DB, draft: ComposeDraft, now: string): Promi
   return { ok: true, jobId, status };
 }
 
+/** Jobs being sent right now. Real uploads take minutes; this stops a cron run and a click posting the same job twice. */
+const inFlight = new Set<number>();
+
 export async function publishJob(db: DB, jobId: number, at: string) {
+  if (inFlight.has(jobId)) return;
+  inFlight.add(jobId);
+  try {
+    await sendJob(db, jobId, at);
+  } finally {
+    inFlight.delete(jobId);
+  }
+}
+
+async function sendJob(db: DB, jobId: number, at: string) {
   const job = db.select().from(publishJobs).where(eq(publishJobs.id, jobId)).get();
   if (!job || job.status !== "scheduled") return;
   const media = db.select().from(mediaAssets).where(eq(mediaAssets.id, job.mediaId)).get()!;
@@ -91,9 +106,9 @@ export async function publishJob(db: DB, jobId: number, at: string) {
     pubs.map(async (pub) => {
       const platform = pub.platformId as PlatformId;
       try {
-        const res = await getPublisher(platform).publish({
+        const res = await getPublisher(db, platform).publish({
           platform,
-          media: { ...mediaInfo(media), path: path.join(UPLOAD_DIR, media.storedName), mime: media.mime },
+          media: { ...mediaInfo(media), id: media.id, path: path.join(UPLOAD_DIR, media.storedName), mime: media.mime, sizeBytes: media.sizeBytes },
           title: pub.title,
           caption: pub.caption,
           options: pub.options as never,
@@ -112,6 +127,7 @@ export async function publishJob(db: DB, jobId: number, at: string) {
         tx.update(publications).set({ status: "failed", error: res.error ?? "unknown error" }).where(eq(publications.id, pub.id)).run();
         continue;
       }
+      const note = res.notes?.length ? res.notes.join("\n") : null;
       okCount++;
       const title = (pub.title || pub.caption.split("\n")[0] || media.originalName).slice(0, 90);
       const content = tx
@@ -128,9 +144,15 @@ export async function publishJob(db: DB, jobId: number, at: string) {
         })
         .returning({ id: contents.id })
         .get();
-      tx.update(publications).set({ status: "published", externalId: res.externalId, contentId: content.id, publishedAt: at }).where(eq(publications.id, pub.id)).run();
+      tx.update(publications)
+        .set({ status: "published", externalId: res.externalId, contentId: content.id, publishedAt: at, url: res.url ?? null, note, error: null })
+        .where(eq(publications.id, pub.id))
+        .run();
     }
-    const status: PublishStatus = okCount === results.length ? "published" : okCount === 0 ? "failed" : "partial";
+    // Job status over all its platforms (a retry may add to ones published earlier).
+    const all = tx.select({ s: publications.status }).from(publications).where(eq(publications.jobId, jobId)).all();
+    const live = all.filter((p) => p.s === "published").length;
+    const status: PublishStatus = live === all.length ? "published" : live === 0 ? "failed" : "partial";
     tx.update(publishJobs).set({ status }).where(eq(publishJobs.id, jobId)).run();
 
     // A sponsored post going live moves its deal to Posted (which later triggers the +7 / +30 report rules).
@@ -147,7 +169,7 @@ export async function publishJob(db: DB, jobId: number, at: string) {
   });
 }
 
-/** Publish every scheduled job due at or before `today` 10:00 (the simulated cron). */
+/** Publish every scheduled job that is due: up to now in live mode, up to `today` 10:00 in demo mode (the simulated cron). */
 export async function publishDue(db: DB, today: string): Promise<number> {
   const cutoff = stamp(today);
   const due = db
@@ -155,8 +177,20 @@ export async function publishDue(db: DB, today: string): Promise<number> {
     .from(publishJobs)
     .where(and(eq(publishJobs.status, "scheduled"), isNotNull(publishJobs.scheduledAt), lte(publishJobs.scheduledAt, cutoff)))
     .all();
-  for (const job of due) await publishJob(db, job.id, job.scheduledAt!);
+  // Demo stamps the post at its scheduled time; live records when it really went out.
+  for (const job of due) await publishJob(db, job.id, IS_LIVE ? bangkokNow() : job.scheduledAt!);
   return due.length;
+}
+
+/** Send the failed platforms of a job again. Published platforms are not touched. */
+export async function retryJob(db: DB, jobId: number, at: string) {
+  const job = db.select().from(publishJobs).where(eq(publishJobs.id, jobId)).get();
+  if (!job || !["failed", "partial"].includes(job.status) || inFlight.has(jobId)) return;
+  db.transaction((tx) => {
+    tx.update(publications).set({ status: "scheduled", error: null }).where(and(eq(publications.jobId, jobId), eq(publications.status, "failed"))).run();
+    tx.update(publishJobs).set({ status: "scheduled" }).where(eq(publishJobs.id, jobId)).run();
+  });
+  await publishJob(db, jobId, at);
 }
 
 export function cancelJob(db: DB, jobId: number) {

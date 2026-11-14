@@ -19,7 +19,12 @@
     "import:workbook": "tsx scripts/import-workbook.ts",
     "verify": "tsx scripts/verify-story.ts",
     "typecheck": "tsc --noEmit",
-    "db:generate": "drizzle-kit generate"
+    "db:generate": "drizzle-kit generate",
+    "dev:api": "cd backend && go run ./cmd/server",
+    "dev:api:live": "cd backend && APP_MODE=live go run ./cmd/server",
+    "build:api": "cd backend && go build -o bin/creator-os-api ./cmd/server",
+    "test:api": "cd backend && go test ./...",
+    "verify:api": "tsx scripts/verify-api.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.5.0",

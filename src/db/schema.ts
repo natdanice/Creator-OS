@@ -424,6 +424,8 @@ export const publications = sqliteTable(
     contentId: integer("content_id").references(() => contents.id), // row created in the CDP once live
     publishedAt: text("published_at"),
     error: text("error"),
+    url: text("url"), // link to the live post, when the platform gives one
+    note: text("note"), // non-fatal platform notes (e.g. "upload is private until the app is audited")
   },
   (t) => [index("publications_job").on(t.jobId)],
 );

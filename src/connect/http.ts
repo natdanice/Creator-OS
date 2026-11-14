@@ -8,21 +8,38 @@ export class ApiError extends Error {
   }
 }
 
-export async function getJson<T>(url: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, { ...init, cache: "no-store" });
-  const text = await res.text();
-  let data: unknown = null;
+/** "host: 400 message" from a failed response (JSON error bodies from Google, Meta and TikTok). */
+export async function readError(res: Response, url = res.url): Promise<string> {
+  const text = await res.text().catch(() => "");
+  return errorText(url, res.status, text);
+}
+
+function errorText(url: string, status: number, text: string): string {
+  let d: { error?: { message?: string; error_user_msg?: string } | string; error_description?: string; message?: string } | null = null;
   try {
-    data = text ? JSON.parse(text) : null;
+    d = text ? JSON.parse(text) : null;
   } catch {
     /* non-JSON error page */
   }
-  if (!res.ok) {
-    const d = data as { error?: { message?: string } | string; error_description?: string; message?: string } | null;
-    const msg = (typeof d?.error === "object" ? d.error?.message : d?.error_description ?? d?.error ?? d?.message) ?? text.slice(0, 200);
-    throw new ApiError(`${new URL(url).host}: ${res.status} ${msg}`, res.status);
+  const msg = (typeof d?.error === "object" ? (d.error?.error_user_msg ?? d.error?.message) : (d?.error_description ?? d?.error ?? d?.message)) ?? text.slice(0, 200);
+  let host = "request";
+  try {
+    host = new URL(url).host;
+  } catch {
+    /* keep default */
   }
-  return data as T;
+  return `${host}: ${status} ${msg}`;
+}
+
+export async function getJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+  const res = await fetch(url, { ...init, cache: "no-store" });
+  const text = await res.text();
+  if (!res.ok) throw new ApiError(errorText(url, res.status, text), res.status);
+  try {
+    return (text ? JSON.parse(text) : null) as T;
+  } catch {
+    return null as T;
+  }
 }
 
 export const bearer = (token: string): RequestInit => ({ headers: { Authorization: `Bearer ${token}` } });

@@ -1,12 +1,10 @@
 import Link from "next/link";
 import { Bot, Inbox as InboxIcon } from "lucide-react";
-import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { brandContacts, COMMENT_CATEGORIES, rateCard, type CommentCategory } from "@/db/schema";
+import { COMMENT_CATEGORIES, type CommentCategory } from "@/db/schema";
 import { PLATFORM_KEYS } from "@/lib/queries/overview";
-import { getStoryDate } from "@/lib/queries/settings";
-import { commentCountsByCategory, commentQueue, COMMENT_WINDOW_DAYS, inboxCounts, listThreads, NEEDS_REPLY, threadMessages } from "@/inbox/queries";
-import { getBriefDetector, guessDeliverables } from "@/inbox/briefDetector";
+import { getComments, getInboxSummary, getThread, getThreads } from "@/lib/api";
+import { getBriefDetector } from "@/inbox/briefDetector";
 import { suggestBrandReply, suggestCommentReply } from "@/inbox/replies";
 import { getConnection } from "@/connect/store";
 import { configured } from "@/connect/providers";
@@ -33,11 +31,7 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
   const { t } = i18n;
   const params = await searchParams;
   const tab = params.tab === "comments" ? "comments" : "brands";
-  const db = getDb();
-  const today = getStoryDate(db);
-  const counts = inboxCounts(db);
-  const openComments = commentCountsByCategory(db, today);
-  const needsReply = openComments.filter((c) => NEEDS_REPLY.includes(c.category)).reduce((s, c) => s + c.n, 0);
+  const { today, counts, needsReply } = await getInboxSummary();
 
   const tabs = [
     { key: "brands", href: "/inbox", label: t.inbox.tabBrands, badge: counts.unread },
@@ -63,12 +57,12 @@ export default async function InboxPage({ searchParams }: { searchParams: Promis
 async function BrandMessages({ i18n, today, threadParam }: { i18n: I18n; today: string; threadParam?: string }) {
   const { t, date, dateShort } = i18n;
   const db = getDb();
-  const threads = listThreads(db, today);
+  const { threads } = await getThreads();
   const current = threads.find((x) => x.brandId === Number(threadParam)) ?? threads[0];
-  const msgs = current ? threadMessages(db, current.brandId).filter((r) => r.m.sentAt.slice(0, 10) <= today) : [];
-  const contact = current ? db.select().from(brandContacts).where(and(eq(brandContacts.brandId, current.brandId), eq(brandContacts.isPrimary, true))).get() : undefined;
-  const lastIn = [...msgs].reverse().find((r) => r.m.direction === "in")?.m;
-  const cards = db.select().from(rateCard).all();
+  const thread = current ? (await getThread(current.brandId)).thread : null;
+  const msgs = thread?.messages ?? [];
+  const contact = thread?.contact ?? undefined;
+  const lastIn = [...msgs].reverse().find((m) => m.direction === "in");
   const detector = getBriefDetector();
 
   if (!current) return <Card><p className="text-sm text-muted">{t.inbox.noThreads}</p></Card>;
@@ -114,10 +108,9 @@ async function BrandMessages({ i18n, today, threadParam }: { i18n: I18n; today: 
       >
         <MarkRead brandId={current.brandId} unread={current.unread} />
         <ol className="max-h-[60vh] space-y-4 overflow-auto p-4">
-          {msgs.map(({ m, dealTitle, dealStage }) => {
+          {msgs.map((m) => {
+            const { dealTitle, dealStage } = m;
             const out = m.direction === "out";
-            const deliverables = guessDeliverables(m.brief?.platforms ?? []);
-            const listPrice = deliverables.reduce((s, c) => s + (cards.find((x) => x.code === c)?.price ?? 0), 0);
             return (
               <li key={m.id} className={`flex flex-col ${out ? "items-end" : "items-start"}`}>
                 <div className={`max-w-[85%] whitespace-pre-line rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${out ? "rounded-br-sm bg-ink text-white" : "rounded-bl-sm border border-line bg-white"}`}>{m.body}</div>
@@ -159,8 +152,8 @@ async function BrandMessages({ i18n, today, threadParam }: { i18n: I18n; today: 
                       <BriefActions
                         messageId={m.id}
                         defaultTitle={m.brief.product ?? m.body.slice(0, 40)}
-                        defaultValue={m.brief.budget ?? listPrice}
-                        deliverables={deliverables.map((c) => cards.find((x) => x.code === c)?.name ?? c).join(" + ")}
+                        defaultValue={m.brief.budget ?? m.brief.listPrice}
+                        deliverables={m.brief.deliverables.map((c) => c.name).join(" + ")}
                       />
                     )}
                     {m.briefStatus === "converted" && dealTitle && (
@@ -197,12 +190,11 @@ async function BrandMessages({ i18n, today, threadParam }: { i18n: I18n; today: 
 
 async function Comments({ i18n, today, params }: { i18n: I18n; today: string; params: Params }) {
   const { t, date } = i18n;
-  const db = getDb();
   const cat = params.cat && (COMMENT_CATEGORIES as readonly string[]).includes(params.cat) ? (params.cat as CommentCategory) : "needs_reply";
   const status = STATUSES.includes(params.status as "open") ? (params.status as (typeof STATUSES)[number]) : "open";
   const platform = PLATFORM_KEYS.includes(params.platform as "tiktok") ? params.platform : undefined;
-  const { rows, total } = commentQueue(db, today, { category: cat, platform, status });
-  const counts = commentCountsByCategory(db, today);
+  const { rows, total, counts, windowDays } = await getComments({ cat, platform, status });
+  const NEEDS_REPLY: CommentCategory[] = ["product_question", "general_question", "content_request"];
   const countOf = (c: CommentCategory | "needs_reply") => (c === "needs_reply" ? counts.filter((x) => NEEDS_REPLY.includes(x.category)) : counts.filter((x) => x.category === c)).reduce((s, x) => s + x.n, 0);
   const href = (patch: Partial<Params>) => {
     const q = new URLSearchParams(Object.entries({ ...params, tab: "comments", ...patch }).filter(([, v]) => v) as [string, string][]);
@@ -240,7 +232,7 @@ async function Comments({ i18n, today, params }: { i18n: I18n; today: string; pa
         </form>
       </div>
       <p className="mb-3 text-xs text-muted">
-        {fmt(t.inbox.showing, { n: rows.length, total, days: COMMENT_WINDOW_DAYS })} · {t.inbox.commentsNote}
+        {fmt(t.inbox.showing, { n: rows.length, total, days: windowDays })} · {t.inbox.commentsNote}
       </p>
       {rows.length === 0 ? (
         <Card>

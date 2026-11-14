@@ -4,6 +4,9 @@ import { getDb } from "@/db/client";
 import { brands, deals, mediaAssets, publications, publishJobs } from "@/db/schema";
 import { stageAtLeast } from "@/crm/rules";
 import { getStoryDate } from "@/lib/queries/settings";
+import { bangkokNow } from "@/lib/clock";
+import { IS_LIVE } from "@/lib/config";
+import { publishTargets } from "@/publish/publishers";
 import { getI18n } from "@/lib/i18n/server";
 import { Card, PageHeader, Pill, PlatformTag } from "@/components/ui";
 import { Composer, type DealOption } from "@/components/publisher/Composer";
@@ -20,7 +23,8 @@ export default async function PublisherPage() {
   const { t, date } = await getI18n();
   const P = t.publisher;
   const db = getDb();
-  const now = `${getStoryDate(db)}T10:00`;
+  const now = IS_LIVE ? bangkokNow().slice(0, 16) : `${getStoryDate(db)}T10:00`;
+  const targets = await publishTargets(db);
 
   const brandRows = db.select().from(brands).all();
   const allDeals = db.select().from(deals).all();
@@ -41,7 +45,7 @@ export default async function PublisherPage() {
   return (
     <>
       <PageHeader title={P.title} subtitle={P.subtitle} />
-      <Composer deals={dealOptions} now={now} />
+      <Composer deals={dealOptions} now={now} live={IS_LIVE} targets={targets} />
 
       <Card title={P.queue} className="mt-8" bodyClass="overflow-x-auto">
         {jobs.length === 0 ? (
@@ -80,12 +84,26 @@ export default async function PublisherPage() {
                       </div>
                     </td>
                     <td className="py-3">
-                      <ul className="space-y-1">
+                      <ul className="max-w-[420px] space-y-1.5">
                         {mine.map((p) => (
-                          <li key={p.id} className="flex items-center gap-2">
-                            <PlatformTag id={p.platformId} />
-                            <Pill tone={TONE[p.status]}>{P.statuses[p.status]}</Pill>
-                            {p.externalId && <span className="tabular text-[11px] text-subtle">{p.externalId}</span>}
+                          <li key={p.id}>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <PlatformTag id={p.platformId} />
+                              <Pill tone={TONE[p.status]}>{P.statuses[p.status]}</Pill>
+                              {p.url ? (
+                                <a href={p.url} target="_blank" rel="noreferrer" className="text-xs font-medium text-accent-strong hover:underline">
+                                  {P.openPost} ↗
+                                </a>
+                              ) : (
+                                p.externalId && <span className="tabular text-[11px] text-subtle">{p.externalId}</span>
+                              )}
+                            </div>
+                            {p.status === "failed" && p.error && <p className="mt-0.5 text-xs text-bad">{p.error}</p>}
+                            {p.note?.split("\n").map((n) => (
+                              <p key={n} className="mt-0.5 text-xs text-warn">
+                                {n}
+                              </p>
+                            ))}
                           </li>
                         ))}
                       </ul>
@@ -96,7 +114,7 @@ export default async function PublisherPage() {
                     <td className="py-3">
                       <Pill tone={TONE[j.status]}>{P.statuses[j.status]}</Pill>
                     </td>
-                    <td className="px-5 py-3">{j.status === "scheduled" && <QueueActions jobId={j.id} />}</td>
+                    <td className="px-5 py-3">{["scheduled", "failed", "partial"].includes(j.status) && <QueueActions jobId={j.id} status={j.status} />}</td>
                   </tr>
                 );
               })}

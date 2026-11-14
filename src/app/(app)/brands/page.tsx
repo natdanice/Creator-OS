@@ -1,11 +1,9 @@
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import { createBrandAction } from "@/app/actions";
-import { getDb } from "@/db/client";
 import { PRODUCT_CATEGORIES } from "@/db/schema";
-import { computeBrandStats } from "@/crm/brandStats";
 import { TIERS } from "@/crm/rules";
-import { getStoryDate } from "@/lib/queries/settings";
+import { getBrands } from "@/lib/api";
 import { BrandsTabs } from "@/components/BrandsTabs";
 import { btn, Card, PageHeader, Pill, TierBadge } from "@/components/ui";
 import { baht } from "@/lib/format";
@@ -20,15 +18,9 @@ export async function generateMetadata() {
 export default async function BrandsPage({ searchParams }: { searchParams: Promise<{ q?: string; tier?: string; category?: string }> }) {
   const { t, date, dateShort } = await getI18n();
   const { q = "", tier = "", category = "" } = await searchParams;
-  const db = getDb();
-  const today = getStoryDate(db);
-  const all = computeBrandStats(db, today);
-  const rows = all
-    .filter((s) => !q || s.brand.name.toLowerCase().includes(q.toLowerCase()))
-    .filter((s) => !tier || s.tier === tier)
-    .filter((s) => !category || s.brand.category === category)
-    .sort((a, b) => TIERS.indexOf(a.tier) - TIERS.indexOf(b.tier) || b.dealValueThisYear - a.dealValueThisYear);
-  const countBy = (tr: string) => all.filter((s) => s.tier === tr).length;
+  // Search, tier and category filtering and the sort happen in the Go API (backend/).
+  const { rows, tierCounts } = await getBrands({ q, tier, category });
+  const countBy = (tr: (typeof TIERS)[number]) => tierCounts[tr] ?? 0;
 
   return (
     <>

@@ -1,9 +1,7 @@
 import Link from "next/link";
 import { ArrowRight, Lightbulb } from "lucide-react";
-import { getDb } from "@/db/client";
-import { getStoryDate } from "@/lib/queries/settings";
-import { overviewData } from "@/lib/queries/overview";
-import { todayActions, type TodayAction } from "@/lib/queries/today";
+import { getOverview, getTodayActions } from "@/lib/api";
+import type { TodayAction } from "@/lib/queries/today";
 import { MockBadge, Pill, PlatformTag } from "@/components/ui";
 import { KpiCard } from "@/components/KpiCard";
 import { DailyViewsChart } from "@/components/charts/DailyViewsChart";
@@ -83,11 +81,10 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
   const { t, date, dateShort } = i18n;
   const { range: r } = await searchParams;
   const range = RANGES.includes(Number(r) as 7) ? Number(r) : 28;
-  const db = getDb();
-  const today = getStoryDate(db);
-  const data = overviewData(db, today, range);
+  // The numbers come from the Go API (backend/), which reads the same database.
+  const [{ today, overview: data }, { actions: rawActions }] = await Promise.all([getOverview(range), getTodayActions()]);
   const { headline, perPlatform } = data.insight;
-  const actions = todayActions(db, today).map((a) => present(i18n, today, a));
+  const actions = rawActions.map((a) => present(i18n, today, a));
   // Demo mode always reads 10:00; live mode follows the Bangkok clock.
   const hour = Number(stamp(today).slice(11, 13));
   const greeting = hour < 12 ? t.overview.greeting : hour < 17 ? t.overview.greetingAfternoon : t.overview.greetingEvening;
@@ -224,12 +221,16 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         <h2 id="top" className="text-lg font-medium">
           {t.overview.topContent}
         </h2>
-        <p className="mb-3 text-xs text-muted">{t.overview.topContentHint}</p>
+        <p className="mb-3 text-xs text-muted">
+          {t.overview.topContentHint}
+          {data.pieces.posts > data.pieces.videos && <> · {fmt(t.overview.pieces, { videos: data.pieces.videos, posts: data.pieces.posts })}</>}
+        </p>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
+          <table className="w-full min-w-[720px] text-sm">
             <thead className="text-left text-xs text-muted">
               <tr className="border-b border-line">
                 <th className="py-2.5 pr-4 font-normal">{t.overview.title_col}</th>
+                <th className="py-2.5 pr-4 font-normal">{t.overview.colPlatforms}</th>
                 <th className="py-2.5 font-normal">{t.common.type}</th>
                 <th className="py-2.5 text-right font-normal">{t.common.views}</th>
                 <th className="py-2.5 text-right font-normal">{t.common.erShort}</th>
@@ -238,14 +239,32 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
             </thead>
             <tbody>
               {data.top.map((c) => (
-                <tr key={c.id} className="border-b border-line last:border-0">
-                  <td className="py-2.5 pr-4">
-                    <div className="line-clamp-1 font-medium">{c.title}</div>
+                <tr key={c.key} className="border-b border-line align-top last:border-0">
+                  <td className="max-w-[340px] py-2.5 pr-4">
+                    <div className="line-clamp-1 font-medium" title={[...new Set(c.titles)].join("\n")}>
+                      {c.title}
+                    </div>
                     <div className="mt-0.5 flex items-center gap-2">
-                      <PlatformTag id={c.platformId} />
                       <span className="text-xs text-subtle">{dateShort(c.postedAt)}</span>
                       {c.isSponsored && <Pill tone="accent">{t.common.sponsored}</Pill>}
                     </div>
+                  </td>
+                  <td className="py-2.5 pr-4">
+                    {c.posts.length > 1 && c.views > 0 && (
+                      <div className="mb-1.5 flex h-1.5 w-32 gap-px overflow-hidden rounded-full" aria-hidden>
+                        {c.posts.map((p) => (
+                          <span key={p.id} style={{ width: `${(p.views / c.views) * 100}%`, background: `var(--color-${p.platformId})` }} />
+                        ))}
+                      </div>
+                    )}
+                    <ul className="flex flex-wrap gap-x-3 gap-y-1">
+                      {c.posts.map((p) => (
+                        <li key={p.id} className="flex items-center gap-1.5">
+                          <PlatformTag id={p.platformId} />
+                          <span className="tabular text-xs text-ink-2">{compactNum(p.views)}</span>
+                        </li>
+                      ))}
+                    </ul>
                   </td>
                   <td className="py-2.5 text-ink-2">{t.contentTypes[c.type]}</td>
                   <td className="tabular py-2.5 text-right">{num(c.views)}</td>

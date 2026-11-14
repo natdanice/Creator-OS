@@ -29,7 +29,7 @@ export async function fetchTikTok(token: string, month: string) {
   }
   const contents: RawContent[] = videos.map((v) => {
     const text = v.title || v.video_description || "";
-    return { externalId: v.id, title: firstLine(text), postedAt: toBangkok(v.create_time), isSponsored: looksSponsored(text), ...guessTags(text) };
+    return { externalId: v.id, title: firstLine(text), postedAt: toBangkok(v.create_time), isSponsored: looksSponsored(text), ...guessTags(text), tagsGuessed: true };
   });
   const posts = videos.map((v) => ({
     externalId: v.id,

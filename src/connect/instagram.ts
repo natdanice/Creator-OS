@@ -24,7 +24,7 @@ export async function fetchInstagram(token: string, month: string) {
   for (const m of media) {
     const caption = m.caption ?? "";
     const postedAt = toBangkok(m.timestamp);
-    contents.push({ externalId: m.id, title: firstLine(caption), postedAt, isSponsored: looksSponsored(caption), ...guessTags(caption) });
+    contents.push({ externalId: m.id, title: firstLine(caption), postedAt, isSponsored: looksSponsored(caption), ...guessTags(caption), tagsGuessed: true });
     const ins = (await q(`${m.id}/insights`, { metric: "views,likes,comments,shares,saved,profile_visits,follows" }).catch(() =>
       // Not every metric exists for every media type; fall back to the common ones.
       q(`${m.id}/insights`, { metric: "views,likes,comments,shares,saved" }).catch(() => ({ data: [] })),

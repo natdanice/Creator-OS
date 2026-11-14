@@ -64,6 +64,7 @@ export class YouTubeApiAdapter implements PlatformAdapter {
       postedAt: v.publishedAt,
       isSponsored: looksSponsored(`${v.title}\n${v.description}`),
       ...guessTags(`${v.title} ${v.description.slice(0, 300)}`),
+      tagsGuessed: true,
     }));
   }
 

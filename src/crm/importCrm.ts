@@ -13,7 +13,8 @@ import { addDays } from "@/lib/dates";
 import { th } from "@/lib/i18n/th";
 import { en } from "@/lib/i18n/en";
 
-export const CRM_COLUMNS = ["brand", "category", "website", "contact_name", "contact_role", "contact_channel", "contact_handle", "deal_title", "stage", "value", "deliverables", "created_date", "posted_date", "paid_date", "invoice_no"] as const;
+import { CRM_COLUMNS } from "./crmColumns";
+export { CRM_COLUMNS };
 
 export function crmTemplate() {
   const rows = [

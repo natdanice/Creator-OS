@@ -75,7 +75,7 @@ export const DEFAULT_OPTIONS: PlatformOptionsMap = {
 /** What a publisher receives for one platform. */
 export interface PublishRequest<P extends PlatformId = PlatformId> {
   platform: P;
-  media: MediaInfo & { path: string; mime: string };
+  media: MediaInfo & { id: number; path: string; mime: string; sizeBytes: number };
   title: string | null;
   caption: string;
   options: PlatformOptionsMap[P];
@@ -84,12 +84,17 @@ export interface PublishRequest<P extends PlatformId = PlatformId> {
 export interface PublishResult {
   ok: boolean;
   externalId?: string;
+  /** Link to the live post, when the platform gives one. */
+  url?: string;
+  /** Non-fatal notes shown in the queue (e.g. a label that must be set in the app). */
+  notes?: string[];
   error?: string;
 }
 
 /**
- * Outbound counterpart of PlatformAdapter. The prototype ships MockPublisher;
- * a real TikTok / Instagram Graph / YouTube Data API publisher implements the same interface.
+ * Outbound counterpart of PlatformAdapter. Demo mode uses MockPublisher; live mode uses
+ * the API publishers in ./live (YouTube Data API, Instagram API with Instagram Login,
+ * TikTok Content Posting API). `getPublisher()` in ./publishers picks one.
  */
 export interface PlatformPublisher {
   readonly kind: "mock" | "api";

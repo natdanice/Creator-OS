@@ -21,6 +21,11 @@ export interface RawContent {
   isSponsored: boolean;
   /** CRM link, if the source knows it (mock does; CSV exports don't — linked later in the UI). */
   dealId?: number | null;
+  /**
+   * true when type / category / sponsored are keyword guesses (API connectors). A post that's
+   * already stored then keeps its own tags, e.g. the ones the creator picked in the Publisher.
+   */
+  tagsGuessed?: boolean;
 }
 
 export interface RawMetricDaily {

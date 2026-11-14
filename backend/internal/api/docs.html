@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Creator OS API</title>
+<style>
+  :root {
+    --bg: #faf9f7; --card: #fff; --ink: #1c1b19; --ink-2: #4a4843; --muted: #7a776f; --line: #e6e3dc;
+    --accent: #5b4bdb; --accent-soft: #eeecfd; --good: #1c7a4a; --warn: #a36200; --bad: #b3261e; --code: #f3f1ec;
+    --get: #1c7a4a; --post: #5b4bdb; --put: #a36200;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151413; --card: #1e1d1b; --ink: #f1efe9; --ink-2: #c9c5bb; --muted: #928e84; --line: #34322e;
+      --accent: #9a8cff; --accent-soft: #2a2748; --good: #5fcf94; --warn: #e6b04d; --bad: #ff8a80; --code: #26241f;
+      --get: #5fcf94; --post: #9a8cff; --put: #e6b04d;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 920px; margin: 0 auto; padding: 32px 16px 80px; }
+  h1 { font-size: 26px; margin: 0 0 4px; letter-spacing: -0.01em; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 32px 0 8px; font-weight: 600; }
+  p.lead { color: var(--ink-2); margin: 0 0 20px; max-width: 62ch; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); display: inline-block; margin-right: 6px; }
+  .dot.up { background: var(--good); } .dot.down { background: var(--bad); }
+  .pill { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .bar label { display: flex; align-items: center; gap: 8px; margin-left: auto; font-size: 13px; color: var(--muted); }
+  input, textarea { font: inherit; color: var(--ink); background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; }
+  input:focus, textarea:focus, button:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  textarea { width: 100%; min-height: 84px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; resize: vertical; }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 12px; margin-bottom: 8px; }
+  summary { list-style: none; cursor: pointer; display: flex; gap: 10px; align-items: baseline; padding: 11px 14px; flex-wrap: wrap; }
+  summary::-webkit-details-marker { display: none; }
+  .m { font: 700 12px ui-monospace, monospace; min-width: 44px; }
+  .m.GET { color: var(--get); } .m.POST { color: var(--post); } .m.PUT { color: var(--put); }
+  .p { font: 14px ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .s { color: var(--ink-2); font-size: 13.5px; flex-basis: 100%; padding-left: 54px; }
+  .try { border-top: 1px solid var(--line); padding: 14px; display: grid; gap: 10px; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .row span { color: var(--muted); font-size: 13px; min-width: 64px; }
+  .row input { flex: 1 1 200px; min-width: 0; }
+  button { font: inherit; font-weight: 600; background: var(--accent); color: #fff; border: 0; border-radius: 8px; padding: 7px 16px; cursor: pointer; }
+  button[disabled] { opacity: .6; cursor: progress; }
+  .out { background: var(--code); border-radius: 8px; padding: 10px 12px; font: 12.5px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: pre-wrap; word-break: break-word; max-height: 420px; overflow: auto; }
+  .status { font-size: 13px; font-weight: 600; } .status.ok { color: var(--good); } .status.err { color: var(--bad); }
+  .note { font-size: 13px; color: var(--muted); margin-top: 28px; }
+  code { background: var(--code); border-radius: 5px; padding: 1px 5px; font-size: 13px; }
+  @media (max-width: 520px) { .s { padding-left: 0; } .bar label { margin-left: 0; width: 100%; } .bar label input { flex: 1; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Creator OS API</h1>
+  <p class="lead">The backend behind the Creator OS app. It reads and writes the same SQLite database as the web app and returns JSON. Open an endpoint below to try it.</p>
+
+  <div class="bar" role="status">
+    <span><span class="dot" id="dot"></span><span id="state">Checking…</span></span>
+    <span class="pill" id="mode" hidden></span>
+    <span id="today" style="color:var(--muted);font-size:13px"></span>
+    <label id="tokenBox" hidden>API token <input id="token" type="password" autocomplete="off" placeholder="Bearer token" size="22"></label>
+  </div>
+
+  <div id="list"></div>
+
+  <p class="note">Everything is under <code>/api/v1</code>. Dates are ISO text and money is whole baht. Changes (POST/PUT) take effect immediately on the real database, so on live data these buttons do what they say.</p>
+</main>
+
+<script>
+const DATA = /*DATA*/null;
+const $ = (id) => document.getElementById(id);
+const el = (tag, attrs = {}, ...kids) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === "class" ? (n.className = v) : k.startsWith("on") ? n.addEventListener(k.slice(2), v) : n.setAttribute(k, v);
+  for (const c of kids.flat()) n.append(c);
+  return n;
+};
+
+const tokenInput = $("token");
+if (DATA.tokenRequired) { $("tokenBox").hidden = false; try { tokenInput.value = sessionStorage.getItem("api-token") || ""; } catch {} }
+tokenInput.addEventListener("input", () => { try { sessionStorage.setItem("api-token", tokenInput.value); } catch {} });
+
+fetch("/api/v1/health").then((r) => r.json()).then((h) => {
+  $("dot").className = "dot up"; $("state").textContent = "API is running";
+  $("mode").hidden = false; $("mode").textContent = h.mode + " mode"; $("today").textContent = "today " + h.today;
+}).catch(() => { $("dot").className = "dot down"; $("state").textContent = "Can't reach the API"; });
+
+function card(e) {
+  const params = [...e.path.matchAll(/\{(\w+)\}/g)].map((m) => m[1]);
+  const inputs = Object.fromEntries(params.map((p) => [p, el("input", { placeholder: "1", inputmode: "numeric", "aria-label": p, size: 6 })]));
+  const query = e.method === "GET" ? el("input", { value: e.query || "", placeholder: "a=1&b=2", "aria-label": "query string" }) : null;
+  const body = e.method !== "GET" && e.body ? el("textarea", { "aria-label": "JSON body", spellcheck: "false" }, e.body) : null;
+  const status = el("span", { class: "status" });
+  const out = el("pre", { class: "out", hidden: "" });
+  const go = el("button", { type: "button", onclick: send }, e.method === "GET" ? "Send" : "Send " + e.method);
+
+  async function send() {
+    let path = e.path;
+    for (const p of params) {
+      const v = inputs[p].value.trim();
+      if (!v) { status.className = "status err"; status.textContent = "Fill in " + p; return; }
+      path = path.replace("{" + p + "}", encodeURIComponent(v));
+    }
+    if (query && query.value.trim()) path += "?" + query.value.trim().replace(/^\?/, "");
+    const headers = {};
+    if (tokenInput.value) headers.Authorization = "Bearer " + tokenInput.value;
+    if (body) headers["Content-Type"] = "application/json";
+    go.disabled = true; status.className = "status"; status.textContent = "…";
+    const t0 = performance.now();
+    try {
+      const res = await fetch(path, { method: e.method, headers, body: body ? body.value : undefined });
+      const text = await res.text();
+      let shown = text;
+      try { shown = JSON.stringify(JSON.parse(text), null, 2); } catch {}
+      status.className = "status " + (res.ok ? "ok" : "err");
+      status.textContent = res.status + " " + res.statusText + " · " + Math.round(performance.now() - t0) + " ms";
+      out.hidden = false; out.textContent = shown.length > 60000 ? shown.slice(0, 60000) + "\n… (" + (shown.length - 60000) + " more characters)" : shown;
+    } catch (err) {
+      status.className = "status err"; status.textContent = "Request failed: " + err.message;
+    } finally { go.disabled = false; }
+  }
+
+  const rows = [];
+  for (const p of params) rows.push(el("div", { class: "row" }, el("span", {}, p), inputs[p]));
+  if (query) rows.push(el("div", { class: "row" }, el("span", {}, "query"), query));
+  if (body) rows.push(body);
+  return el("details", {},
+    el("summary", {}, el("span", { class: "m " + e.method }, e.method), el("span", { class: "p" }, e.path), el("span", { class: "s" }, e.summary)),
+    el("div", { class: "try" }, rows, el("div", { class: "row" }, go, status), out));
+}
+
+const list = $("list");
+let group = null;
+for (const e of DATA.endpoints) {
+  if (e.group !== group) { group = e.group; list.append(el("h2", {}, group)); }
+  list.append(card(e));
+}
+</script>
+</body>
+</html>

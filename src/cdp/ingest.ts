@@ -64,12 +64,14 @@ export async function ingest(db: DB, adapter: PlatformAdapter, now: string): Pro
 
   const result = db.transaction((tx) => {
     // contents
-    for (const c of rawContents) {
+    for (const { tagsGuessed, ...c } of rawContents) {
       tx.insert(contents)
         .values({ platformId, ...c, dealId: c.dealId ?? null })
         .onConflictDoUpdate({
           target: [contents.platformId, contents.externalId],
-          set: { title: c.title, type: c.type, productCategory: c.productCategory, postedAt: c.postedAt, isSponsored: c.isSponsored },
+          set: tagsGuessed
+            ? { title: c.title, postedAt: c.postedAt }
+            : { title: c.title, type: c.type, productCategory: c.productCategory, postedAt: c.postedAt, isSponsored: c.isSponsored },
         })
         .run();
     }

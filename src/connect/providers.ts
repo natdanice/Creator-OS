@@ -34,6 +34,7 @@ export const OAUTH: Record<OAuthProvider["id"], OAuthProvider> = {
     scopes: [
       "https://www.googleapis.com/auth/youtube.readonly",
       "https://www.googleapis.com/auth/yt-analytics.readonly",
+      "https://www.googleapis.com/auth/youtube.upload",
       "https://www.googleapis.com/auth/gmail.readonly",
       "https://www.googleapis.com/auth/gmail.compose",
     ],
@@ -47,7 +48,7 @@ export const OAUTH: Record<OAuthProvider["id"], OAuthProvider> = {
     clientIdEnv: "INSTAGRAM_CLIENT_ID",
     clientSecretEnv: "INSTAGRAM_CLIENT_SECRET",
     clientIdParam: "client_id",
-    scopes: ["instagram_business_basic", "instagram_business_manage_insights", "instagram_business_manage_comments"],
+    scopes: ["instagram_business_basic", "instagram_business_manage_insights", "instagram_business_manage_comments", "instagram_business_content_publish"],
     scopeSeparator: ",",
   },
   tiktok: {
@@ -57,10 +58,23 @@ export const OAUTH: Record<OAuthProvider["id"], OAuthProvider> = {
     clientIdEnv: "TIKTOK_CLIENT_KEY",
     clientSecretEnv: "TIKTOK_CLIENT_SECRET",
     clientIdParam: "client_key",
-    scopes: ["user.info.basic", "user.info.stats", "video.list"],
+    scopes: ["user.info.basic", "user.info.stats", "video.list", "video.publish"],
     scopeSeparator: ",",
   },
 };
+
+/** The permission each Publisher platform needs on top of the read scopes. */
+export const PUBLISH_SCOPE = {
+  youtube: "https://www.googleapis.com/auth/youtube.upload",
+  instagram: "instagram_business_content_publish",
+  tiktok: "video.publish",
+} as const;
+
+/** Which connected account a Publisher platform posts through. */
+export const PUBLISH_PROVIDER = { youtube: "google", instagram: "instagram", tiktok: "tiktok" } as const;
+
+/** Granted scopes are stored space-separated (platforms return spaces or commas). */
+export const hasScope = (granted: string | null | undefined, scope: string) => (granted ?? "").split(/[\s,]+/).includes(scope);
 
 export const redirectUri = (p: Provider) => `${APP_URL}/api/connect/${p}/callback`;
 

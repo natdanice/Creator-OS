@@ -11,6 +11,7 @@ Creator OS turns **One-time brands into repeat Partners**.
 | Area | What you get |
 |---|---|
 | **Overview** | A “Needs you today” list and the key numbers across platforms |
+| **Import data** | Drop in any exports or spreadsheets at once; each one is recognised and filed in the right place |
 | **Brands** | A full history per brand (Brand 360), computed tiers, a deal pipeline, quotes and performance reports |
 | **Publisher** | Write one post, adjust it for TikTok, Instagram and YouTube, then publish or schedule it |
 | **Inbox** | Brand messages with automatic brief detection, plus audience comments with suggested replies |
@@ -34,15 +35,21 @@ The app runs in two modes, and they never share a database:
 ```bash
 git clone https://github.com/ddmc1/creator-os.git
 cd creator-os
-npm install && npm run seed && npm run dev
-# open http://localhost:3000
+npm install && npm run seed
+./start.sh          # starts the Go API and the web app (demo mode)
+# open http://127.0.0.1:3000          ·  ./stop.sh stops both
 ```
 
-Requirements: Node 22+ (tested on Node 24.19, macOS). The SQLite driver ships prebuilt binaries for macOS, Windows and Linux, so no compiler is needed. The database is a single local SQLite file at
+`./start.sh live` runs on your real data, and `./start.sh --prod` builds and runs the production servers
+(see [Go API](#go-api-backend)). Requirements: Node 22+ (tested on Node 24.19, macOS) and Go 1.26+ for the API. The SQLite driver ships prebuilt binaries for macOS, Windows and Linux, so no compiler is needed. The database is a single local SQLite file at
 `data/creator-os.db`; no server needed.
 
 | Script | What it does |
 |---|---|
+| `./start.sh [live] [--prod]` | Starts the Go API and the web app together (logs in `.run/`); `./stop.sh` stops both |
+| `npm run dev:api` / `dev:api:live` | Starts only the Go API (demo / live data) |
+| `npm run test:api` | Go tests for the API |
+| `npm run verify:api` | Checks the running Go API returns exactly what the TypeScript code computes from the same database |
 | `npm run seed` | Rebuilds `data/creator-os.db` from scratch with the seeded story (deterministic) |
 | `npm run dev` | Starts the app (demo) |
 | `npm run dev:live` | Starts the app in live mode (your real data) |
@@ -90,7 +97,8 @@ connected accounts. The two never share a database.
    hashed with it (it isn't in `.env.example`, and the fallback is a default value in the code).
 2. `npm run setup:live` creates the empty live database (it refuses to overwrite an existing one).
 3. `npm run dev:live` → sign in → **Settings**: set your rate card, then **Brands → Add brand**.
-4. Bring in what you already have: **Settings → Import your workbook (.xlsx)** reads your own Excel
+4. Bring in what you already have: **Import data** (sidebar) takes any mix of files at once, see
+   [One-stop import](#one-stop-import). The older forms still work: **Settings → Import your workbook (.xlsx)** reads your own Excel
    files (sheets named `TikTok_Clips`, `IG_Posts`, `TikTok_Daily`, `TikTok_Followers_Daily`,
    `TikTok_Follower_Gender/_Territories`, `IG_Audience_AgeGender/_Countries`; or
    `npm run import:workbook -- files…`). Per-post sheets hold lifetime totals, recorded on the posting
@@ -100,24 +108,85 @@ connected accounts. The two never share a database.
 
 | Account | What comes in | Notes |
 |---|---|---|
-| YouTube + Gmail (one Google login) | Daily video stats, comments, audience · brand emails into the Inbox (known contacts, or new briefs) · approved email replies saved as **Gmail drafts** | Google Cloud project with YouTube Data API, YouTube Analytics API and Gmail API enabled; add yourself as a test user. Analytics lags 2–3 days |
-| Instagram | Posts, insights, comments, follower demographics | Creator/Business account; demographics need ≥ 100 followers. Lifetime totals are turned into daily changes (`src/connect/totals.ts`) |
-| TikTok | Videos with views, likes, comments, shares | Display API has no comment text or demographics: keep importing the Studio CSV for those |
+| YouTube + Gmail (one Google login) | Daily video stats, comments, audience · brand emails into the Inbox (known contacts, or new briefs) · approved email replies saved as **Gmail drafts** · **video uploads from the Publisher** | Google Cloud project with YouTube Data API, YouTube Analytics API and Gmail API enabled; add yourself as a test user. Analytics lags 2–3 days |
+| Instagram | Posts, insights, comments, follower demographics · **Reels, photos and Stories from the Publisher** | Creator/Business account; demographics need ≥ 100 followers. Lifetime totals are turned into daily changes (`src/connect/totals.ts`). Add the `instagram_business_content_publish` permission to your Meta app |
+| TikTok | Videos with views, likes, comments, shares · **posting from the Publisher** | Display API has no comment text or demographics: keep importing the Studio CSV for those. Add the **Content Posting API** product (Direct Post, `video.publish`) to your TikTok app |
 | LINE OA | Brand chats into the Inbox; **Send via LINE** sends only when you click | Messaging API channel; set the webhook URL shown in Settings |
 
 **Daily job:** `GET /api/cron/daily` with `Authorization: Bearer <CRON_SECRET>` syncs every account,
 publishes due scheduled posts and runs the automations. Call it once a day (Vercel Cron, a server
 cron, or any scheduler).
 
-**Still simulated in live mode:** posting to platforms (Publisher) stays on the mock publisher until
-each platform approves the app for publishing (TikTok and YouTube keep API uploads private until
-their audit). Connector code follows each platform's documentation at the time of writing, so check
-error messages in Settings against the platform's current docs if a sync fails.
+**Scheduled posts:** `GET /api/cron/publish` (same `Authorization` header) only publishes posts that are
+due, so it's cheap. Call it every 5–15 minutes; otherwise a post scheduled for 18:00 waits for the next
+daily job.
+
+**Publishing for real (live mode):** the Publisher posts through your connected accounts
+(`src/publish/live/*`); demo mode keeps the mock. Accounts connected before this feature have no posting
+permission yet: Settings shows *No posting permission yet*, so click **Reconnect** and allow posting.
+Each Publisher card says who it will post as, or why it can't. What the platforms impose:
+
+| Platform | How it posts | Limits until your developer app is approved |
+|---|---|---|
+| YouTube | Resumable upload in 16 MB chunks | Uploads from a Google Cloud project that hasn't passed YouTube's API audit are locked to **Private**; the queue says so. Each upload uses a large share of the daily API quota. YouTube decides Short vs Video itself (vertical/square ≤ 3 min = Short) |
+| Instagram | Container → video upload → wait for processing → publish → first comment | Images must be **JPEG** and are fetched by Instagram from a signed link (`/api/media/public/…`, valid 1 hour), so image posts need the app on a public `https` `APP_URL`; videos upload directly. The API can't set the *Paid partnership* label (turn it on in the app) and location needs a numeric place ID |
+| TikTok | Direct Post, chunked upload, then status polling | Until TikTok audits your app every post is **Only me**, and branded content can't be Only me. Photo posts are pulled from a URL on a domain verified in the TikTok developer portal (public `APP_URL` needed) |
+
+A failed platform shows its error in the queue, with **Retry failed**, which resends only the platforms
+that failed. Published posts show **Open post**. Videos can take several minutes, so keep the page open
+while it publishes. Connector code follows each platform's documentation at the time of writing, so check
+error messages against the platform's current docs if a sync or post fails.
 
 **Hosting live:** live mode keeps SQLite on disk, so it needs a host with a persistent disk (your
 own computer, a VPS, or Oracle Cloud's free VM). Use `npm run build && npm run start:live`
 (`start:live` applies new migrations first). Serverless hosts without a disk (Vercel) need the
 database moved to Turso/Postgres first.
+
+---
+
+## Go API (`backend/`)
+
+A Go service that owns the app's data and business rules and serves them as JSON to the frontend. It reads and
+writes **the same SQLite file** as the web app (`data/creator-os.db` or `data/creator-os-live.db`, WAL mode,
+pure-Go driver so no C compiler is needed). The tables still come from the Drizzle migrations
+(`npm run seed` / `migrate` / `setup:live`); the API never changes the schema.
+
+**Open `http://127.0.0.1:8080/`** for the API's front page: every endpoint with a description and a “try it”
+form. (A test makes sure no endpoint is missing from that page.)
+
+| Area (`/api/v1/…`) | Endpoints |
+|---|---|
+| System | `GET health`, `GET context` (status, demo/live mode, “today”) |
+| Overview | `GET overview?range=7\|28\|90` · `GET today` (“Needs you today”) |
+| CRM | `GET brands` · `POST brands` · `GET brands/{id}` (Brand 360 with next offer) · `GET pipeline` · `POST deals/{id}/stage` |
+| Finance | `GET finance` · `GET finance/export?year=` · `POST invoices/{id}/paid` |
+| Inbox | `GET inbox` · `GET inbox/threads` · `GET inbox/threads/{brandId}` · `POST inbox/threads/{brandId}/read\|reply` · `GET inbox/comments` · `POST messages/{id}/convert\|ignore` · `POST comments/{id}/reply\|hide` |
+| Audience | `GET audience` · `GET audience/segments/{id}/members` · `GET audience/members/{pseudoId}` |
+| Automation | `GET automation` · `POST automation/rules/{id}/enabled` · `POST automation/reset` · `POST tasks/{id}/complete\|dismiss` |
+| Settings | `GET settings` · `PUT settings/rates` · `PUT settings/profile` |
+
+The frontend calls it from server code only (`src/lib/api.ts`). **On Go now:** Overview, Brands, Brand 360,
+Pipeline, Finance, Inbox, Audience, Automation (everything after a task is drafted) and the Settings profile,
+rate card, import history and consent summary, plus the actions on those pages.
+
+**Still in Next.js** (reads/writes the same database directly): the rules that *create* automation tasks
+(they own the Thai message templates and the drafting), Publisher, One-stop Import and CSV/workbook imports,
+connected-account logins (OAuth tokens), Ask AI, the print pages (media kit, report, quote), and
+sending (Gmail drafts, LINE messages).
+
+- **Same rules, one source:** the Go code is a port of `src/crm/*`, `src/cdp/crossPost.ts` and
+  `src/lib/queries/*`. `npm run verify:api` compares the two on whatever database you run it against
+  (Overview in 3 ranges, today list, brands, every Brand 360 incl. the next offer in English and Thai, pipeline,
+  finance, CSV, the Inbox, Audience, Automation and Settings reads) and fails on any difference.
+- **Settings:** the API reads `.env.local` too. `API_PORT` (8080), `API_URL` (where the frontend looks),
+  `API_TOKEN` (optional shared secret: set it on both sides if the API is ever reachable beyond this computer;
+  without a token the API only accepts local connections and refuses to listen elsewhere).
+- **Live mode:** `APP_MODE=live` (done by `./start.sh live` / `npm run dev:api:live`) uses the live database
+  and the real Bangkok date.
+- **Layout:** `cmd/server` (main), `internal/api` (HTTP), `internal/crm` (tiers, finance, writes),
+  `internal/overview`, `internal/today`, `internal/cdp` (cross-post grouping, spikes), `internal/inbox`,
+  `internal/audience`, `internal/automation`, `internal/settings`, `internal/brand360` (post performance, next offer),
+  `internal/store` (database, clock). Tests use a throwaway database built from the project's own migrations.
 
 ---
 
@@ -162,7 +231,7 @@ flowchart LR
 | Inbox | `src/inbox/*` (brief detector, thread + comment queries, suggested replies), `src/app/(app)/inbox/page.tsx` |
 | Finance | `src/crm/finance.ts`, `src/app/(app)/finance/page.tsx`, `src/app/api/finance/export/route.ts` (CSV) |
 | Ask AI | `src/ai/*` (facts, `Assistant` interface, offline `RuleAssistant`, optional `ClaudeAssistant`), `src/app/(app)/ask-ai/page.tsx` |
-| Outbound: Publisher | `src/publish/*` (types, per-platform rules, `PlatformPublisher` + `MockPublisher`, service), `src/app/api/media/route.ts` (upload), `src/app/(app)/content/page.tsx` |
+| Outbound: Publisher | `src/publish/*` (types, per-platform rules, `PlatformPublisher`, `MockPublisher`, `publishers.ts` picks mock vs API, `live/*` YouTube / Instagram / TikTok, service), `src/app/api/media/route.ts` (upload), `src/app/api/media/public/[token]/route.ts` (signed links platforms fetch), `src/app/api/cron/publish/route.ts`, `src/app/(app)/content/page.tsx` |
 
 Stack: Next.js 16 (App Router, Server Components + Server Actions) · TypeScript · Tailwind v4 ·
 SQLite via better-sqlite3 + Drizzle ORM · Recharts. Fonts: Kanit (headings) + IBM Plex Sans Thai (body).
@@ -188,18 +257,49 @@ equal the starting count plus the summed `new_followers`.
 
 4. **Live checks + preview** (`src/publish/rules.ts`, the same code runs in the browser and on the server):
    caption length per platform, Instagram hashtag cap, YouTube title rules, tags length, hashtag overload,
-   image not allowed on YouTube, video length per format, Shorts orientation, captions hidden on Stories.
+   image not allowed on YouTube, video length per format, Shorts orientation, captions hidden on Stories,
+   TikTok branded content can't be "Only me".
    The limits are **prototype values** — confirm them against each platform's current docs before going live.
-5. **Publish now** (= the simulated story date) or **schedule**. Scheduled posts are published by the
-   daily 10:00 automation run (or "Publish now" in the queue).
+5. **Publish now** (demo: the simulated story date; live: right away) or **schedule**. Scheduled posts are
+   published by the daily 10:00 automation run in demo mode, and by `/api/cron/publish` in live mode
+   (or "Publish now" in the queue).
 
 Linking a deal forces the disclosure labels on (and optionally adds `#ad`). When the post goes live, each
 platform's post is written to `contents` (so it appears in the CDP and Brand 360), and the deal moves to
 **Posted**, which arms the +7 / +30 report rules.
 
-**Going live later:** implement `PlatformPublisher` (`src/publish/types.ts`) with the TikTok Content
-Posting API, Instagram Graph API and YouTube Data API, and return it from `getPublisher()` in
-`src/publish/MockPublisher.ts`. Each needs an approved developer app + OAuth for the creator's account.
+**Real publishing:** in live mode `getPublisher()` (`src/publish/publishers.ts`) returns the API publisher for
+each connected platform: `YouTubePublisher`, `InstagramPublisher` and `TikTokPublisher` in `src/publish/live/`,
+all implementing `PlatformPublisher` (`src/publish/types.ts`). Live mode never falls back to the mock: a
+platform that isn't connected fails with a message saying what to do. See
+[Publishing for real](#going-live-your-real-data) for each platform's limits. When the accounts sync later,
+posts made here keep the type, category and deal you picked.
+
+---
+
+## One-stop import
+
+*Import data* in the sidebar (`/import`). Drop every file you have: TikTok / Instagram / YouTube exports,
+your own spreadsheets, your Creator OS workbook. CSV, TSV and Excel (.xlsx), several at once.
+
+1. **Read** (`src/import/read.ts`): one table per CSV or Excel sheet. The header row is found even under a
+   title line; UTF-16 and tab/semicolon files work.
+2. **Recognise** (`src/import/detect.ts`, offline): column names in English, Thai, platform export names
+   and the workbook's own names decide what each table is (posts, comments, daily account stats, audience
+   by age / gender / country, brands & deals) and which column means what; the values are checked, and
+   the platform comes from file names, links and platform-only columns.
+3. **AI, only when unsure** (`src/import/claudeDetect.ts`): with `ANTHROPIC_API_KEY` set, a table the
+   built-in step isn't sure about is shown to Claude: column names plus 3 sample rows, with names /
+   usernames / emails replaced by `<person>`. Never whole files. Every value in the answer is checked.
+4. **Import** (`src/import/load.ts`): sure → imported straight away through the existing pipelines (ingest,
+   `account_daily`, the brands & deals importer, the workbook importer). Not sure → waits on the page
+   with its best guess: confirm what it is, the platform, or the column for a missing field, or skip it.
+   Re-importing a newer export updates the numbers instead of duplicating posts.
+
+Dates: Thai Buddhist years (2569) are converted, and each column is read day-first or month-first from
+its values (Instagram/Meta exports default to month-first). Audience files only replace their own split
+(a gender file keeps the month's age and country). Uploads are kept in `data/import/batches/` (git-ignored,
+removed after a day) so a waiting file can be imported without uploading it again.
 
 ---
 
@@ -300,7 +400,7 @@ erDiagram
 | `rate_card`, `quotes`, `quote_items` | packages, prices, generated quotes |
 | `automation_rules`, `tasks`, `automation_runs` | rules config, drafted tasks (unique `dedupe_key`), run log |
 | `import_runs` | last import status per platform (Settings → Data Sources) |
-| `media_assets`, `publish_jobs`, `publications` | Publisher: uploaded file, the write-once post, and its per-platform caption/options/status |
+| `media_assets`, `publish_jobs`, `publications` | Publisher: uploaded file, the write-once post, and its per-platform caption/options/status, error, platform notes and link to the live post |
 | `messages` | Inbox: brand thread messages (in/out, channel), detected brief (JSON), brief status, linked deal, source task, external message ID (for connected accounts) |
 | `connections` | one row per connected account: encrypted tokens, scopes, last sync and last error |
 | `metric_totals` | latest lifetime totals per post, used to turn platform totals into daily changes |

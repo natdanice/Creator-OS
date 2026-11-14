@@ -9,7 +9,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { and, eq, sql } from "drizzle-orm";
 import { getDb, DB_PATH } from "@/db/client";
-import { activities, brandContacts, brands, comments, DEAL_STAGES, deals, invoices, messages, PRODUCT_CATEGORIES, PROVIDERS, quoteItems, quotes, rateCard, tasks, type ActivityType, type DealStage, type ProductCategory, type Provider } from "@/db/schema";
+import { activities, brandContacts, brands, DEAL_STAGES, deals, PROVIDERS, quoteItems, quotes, rateCard, type DealStage, type Provider } from "@/db/schema";
 import { getStoryDate } from "@/lib/queries/settings";
 import { addDays } from "@/lib/dates";
 import { stamp } from "@/lib/clock";
@@ -20,9 +20,8 @@ import { runAutomations, type RunResult } from "@/automation/engine";
 import { ingest } from "@/cdp/ingest";
 import { CsvAdapter } from "@/cdp/adapters/csv/CsvAdapter";
 import type { PlatformId } from "@/cdp/adapters/PlatformAdapter";
-import { cancelJob, createJob, publishDue, publishJob, type CreateResult } from "@/publish/service";
+import { cancelJob, createJob, publishDue, publishJob, retryJob, type CreateResult } from "@/publish/service";
 import type { ComposeDraft } from "@/publish/types";
-import { guessDeliverables } from "@/inbox/briefDetector";
 import { gatherFacts } from "@/ai/facts";
 import { getAssistant, RuleAssistant, type Answer, type ChatTurn } from "@/ai";
 import { IS_LIVE } from "@/lib/config";
@@ -30,6 +29,7 @@ import { accessToken, disconnect, getConnection } from "@/connect/store";
 import { syncProvider } from "@/connect/sync";
 import { createGmailDraft } from "@/connect/gmail";
 import { isLineUserId, pushLine } from "@/connect/line";
+import { completeTaskApi, convertBriefApi, dismissTaskApi, createBrand, hideCommentApi, ignoreBriefApi, markRead, moveDeal, payInvoice, replyCommentApi, replyToBrand, resetAutomation, saveProfileApi, saveRatesApi, setRuleEnabled } from "@/lib/api";
 
 function revalidateAll() {
   revalidatePath("/", "layout");
@@ -63,42 +63,10 @@ export async function setLocaleAction(locale: string) {
 
 /* ───────── Pipeline ───────── */
 
-const STAGE_ACTIVITY: Partial<Record<DealStage, ActivityType>> = {
-  brief: "brief_received",
-  quotation: "quote_sent",
-  production: "draft_sent",
-  posted: "posted",
-  report_sent: "report_sent",
-  invoiced: "invoiced",
-  paid: "paid",
-};
-
+/** The Go API owns this write: it moves the deal, creates the invoice and logs the brand timeline. */
 export async function moveDealStage(dealId: number, stage: DealStage) {
   if (!DEAL_STAGES.includes(stage)) return;
-  const db = getDb();
-  const today = getStoryDate(db);
-  const deal = db.select().from(deals).where(eq(deals.id, dealId)).get();
-  if (!deal || deal.stage === stage) return;
-  const patch: Partial<typeof deals.$inferInsert> = { stage };
-  if (stage === "posted" && !deal.postedAt) patch.postedAt = stamp(today, "19:00:00");
-  if (stage === "paid") patch.closedAt = stamp(today, "14:00:00");
-  if (stage !== "paid" && deal.closedAt) patch.closedAt = null;
-  db.transaction((tx) => {
-    tx.update(deals).set(patch).where(eq(deals.id, dealId)).run();
-    const inv = tx.select().from(invoices).where(eq(invoices.dealId, dealId)).get();
-    if ((stage === "invoiced" || stage === "paid") && !inv) {
-      const n = tx.select({ n: sql<number>`count(*)` }).from(invoices).get()!.n + 1;
-      tx.insert(invoices)
-        .values({ dealId, number: `INV-${String(n).padStart(4, "0")}`, amount: deal.value, issuedAt: today, dueAt: addDays(today, 30), paidAt: stage === "paid" ? today : null })
-        .run();
-    } else if (stage === "paid" && inv && !inv.paidAt) {
-      tx.update(invoices).set({ paidAt: today }).where(eq(invoices.id, inv.id)).run();
-    }
-    const type = STAGE_ACTIVITY[stage] ?? "note";
-    tx.insert(activities)
-      .values({ brandId: deal.brandId, dealId, type, channel: "system", summary: fmt(dataT.pipeline.moved, { deal: deal.title, stage: dataT.stages[stage] }), occurredAt: stamp(today, "12:00:00") })
-      .run();
-  });
+  await moveDeal(dealId, stage);
   revalidateAll();
 }
 
@@ -158,130 +126,60 @@ export async function runAutomationsAction(date: string): Promise<RunResult & { 
   return { ...res, published };
 }
 
-const DONE_ACTIVITY: Record<string, ActivityType | null> = {
-  post_plus_7: "report_sent",
-  post_plus_30: "report_sent",
-  brand_silent_120: "chat",
-  invoice_overdue_30: "note",
-  pq_spike: null,
-};
-
 /** Human approves a drafted task (after editing/copying it) → mark done + log on the brand timeline. */
 export async function completeTask(taskId: number, finalMessage: string) {
-  const db = getDb();
-  const task = db.select().from(tasks).where(eq(tasks.id, taskId)).get();
-  if (!task || task.status !== "open") return;
-  const at = stamp(task.forDate, "10:30:00");
-  db.transaction((tx) => {
-    tx.update(tasks).set({ status: "done", draftMessage: finalMessage, completedAt: at }).where(eq(tasks.id, taskId)).run();
-    const type = DONE_ACTIVITY[task.ruleId];
-    if (type && task.brandId) {
-      tx.insert(activities)
-        .values({ brandId: task.brandId, dealId: task.dealId, type, channel: task.channel === "internal" ? "system" : task.channel === "line" ? "line" : "email", summary: task.title, occurredAt: at })
-        .run();
-    }
-    // Approved drafts to a brand also land in that brand's Inbox thread.
-    if (task.brandId && task.channel !== "internal") {
-      tx.insert(messages).values({ brandId: task.brandId, direction: "out", channel: task.channel, body: finalMessage, sentAt: at, readAt: at, taskId: task.id, dealId: task.dealId }).run();
-    }
-    // Sending the +7 report moves a Posted deal forward in the pipeline.
-    if (task.ruleId === "post_plus_7" && task.dealId) {
-      tx.update(deals).set({ stage: "report_sent" }).where(and(eq(deals.id, task.dealId), eq(deals.stage, "posted"))).run();
-    }
-  });
+  const r = await completeTaskApi(taskId, finalMessage);
   // With Gmail connected, an approved email also becomes a Gmail draft (still not sent).
-  if (task.channel === "email" && task.brandId) await gmailDraftFor(task.brandId, task.title, finalMessage).catch((e) => console.error("Gmail draft:", e));
+  if (r.done && r.channel === "email" && r.brandId) await gmailDraftFor(r.brandId, r.title, finalMessage).catch((e) => console.error("Gmail draft:", e));
   revalidateAll();
 }
 
 export async function dismissTask(taskId: number) {
-  getDb().update(tasks).set({ status: "dismissed" }).where(eq(tasks.id, taskId)).run();
+  await dismissTaskApi(taskId);
   revalidateAll();
 }
 
 export async function resetTasks() {
-  const db = getDb();
-  db.delete(tasks).run();
-  db.run(sql`delete from automation_runs`);
+  await resetAutomation();
   revalidateAll();
 }
 
 export async function toggleRule(ruleId: string, enabled: boolean) {
-  const { automationRules } = await import("@/db/schema");
-  getDb().update(automationRules).set({ enabled }).where(eq(automationRules.id, ruleId)).run();
+  await setRuleEnabled(ruleId, enabled);
   revalidateAll();
 }
 
 /* ───────── Inbox ───────── */
 
-/** Next timestamp in a thread: the simulated 10:00, or just after the thread's latest message. */
-function nextThreadTime(brandId: number, today: string) {
-  const last = getDb().select({ at: sql<string>`max(${messages.sentAt})` }).from(messages).where(eq(messages.brandId, brandId)).get()?.at;
-  const base = stamp(today, "10:00:00");
-  if (!last || last < base) return base;
-  const d = new Date(last + "Z");
-  d.setUTCMinutes(d.getUTCMinutes() + 1);
-  return d.toISOString().slice(0, 19);
-}
-
 export async function markThreadRead(brandId: number) {
-  const db = getDb();
-  const today = getStoryDate(db);
-  const res = db
-    .update(messages)
-    .set({ readAt: stamp(today, "10:00:00") })
-    .where(and(eq(messages.brandId, brandId), eq(messages.direction, "in"), sql`${messages.readAt} is null`))
-    .run();
-  if (res.changes) revalidateAll();
+  const { changed } = await markRead(brandId);
+  if (changed) revalidateAll();
 }
 
 export async function sendBrandReply(brandId: number, body: string) {
-  const text = body.trim();
-  if (!text) return;
-  const db = getDb();
-  const today = getStoryDate(db);
-  const contact = db.select().from(brandContacts).where(and(eq(brandContacts.brandId, brandId), eq(brandContacts.isPrimary, true))).get();
-  const channel = contact?.channel ?? "line";
-  const at = nextThreadTime(brandId, today);
-  db.transaction((tx) => {
-    tx.insert(messages).values({ brandId, direction: "out", channel, body: text, sentAt: at, readAt: at }).run();
-    tx.insert(activities).values({ brandId, type: "chat", channel, summary: text.length > 80 ? text.slice(0, 80) + "…" : text, occurredAt: at }).run();
-  });
+  if (!body.trim()) return;
+  await replyToBrand(brandId, body);
   revalidateAll();
 }
 
 /** Turn a detected brief into a deal at the Brief stage. */
 export async function convertBrief(messageId: number, title: string, value: number) {
-  const db = getDb();
-  const today = getStoryDate(db);
-  const msg = db.select().from(messages).where(eq(messages.id, messageId)).get();
-  if (!msg || msg.briefStatus !== "new") return;
-  const cards = db.select().from(rateCard).all();
-  const deliverables = guessDeliverables(msg.brief?.platforms ?? []);
-  const listPrice = deliverables.reduce((sum, c) => sum + (cards.find((x) => x.code === c)?.price ?? 0), 0);
-  const dealTitle = title.trim() || msg.brief?.product || dataT.quote.newDeal;
-  const dealValue = Number.isFinite(value) && value > 0 ? Math.round(value) : (msg.brief?.budget ?? listPrice);
-  db.transaction((tx) => {
-    const deal = tx.insert(deals).values({ brandId: msg.brandId, title: dealTitle, stage: "brief", value: dealValue, deliverables, createdAt: stamp(today, "10:00:00") }).returning({ id: deals.id }).get();
-    tx.update(messages).set({ briefStatus: "converted", dealId: deal.id, readAt: msg.readAt ?? stamp(today, "10:00:00") }).where(eq(messages.id, messageId)).run();
-    tx.insert(activities).values({ brandId: msg.brandId, dealId: deal.id, type: "brief_received", channel: msg.channel, summary: `ได้รับบรีฟ: ${dealTitle}`, occurredAt: stamp(today, "10:00:00") }).run();
-  });
+  await convertBriefApi(messageId, title, Number.isFinite(value) ? value : 0);
   revalidateAll();
 }
 
 export async function ignoreBrief(messageId: number) {
-  getDb().update(messages).set({ briefStatus: "ignored" }).where(and(eq(messages.id, messageId), eq(messages.briefStatus, "new"))).run();
+  await ignoreBriefApi(messageId);
   revalidateAll();
 }
 
 export async function replyComment(commentId: number, text: string) {
-  const db = getDb();
-  db.update(comments).set({ replyStatus: "replied", replyText: text.trim() || null, repliedAt: stamp(getStoryDate(db)) }).where(eq(comments.id, commentId)).run();
+  await replyCommentApi(commentId, text);
   revalidateAll();
 }
 
 export async function hideComment(commentId: number) {
-  getDb().update(comments).set({ replyStatus: "hidden" }).where(eq(comments.id, commentId)).run();
+  await hideCommentApi(commentId);
   revalidateAll();
 }
 
@@ -335,65 +233,38 @@ export async function disconnectAction(provider: string) {
 
 /* ───────── Brands & rate card ───────── */
 
+/** Adds a brand through the Go API, then opens its page. */
 export async function createBrandAction(formData: FormData) {
-  const db = getDb();
-  const today = getStoryDate(db);
-  const name = String(formData.get("name") ?? "").trim();
+  const field = (k: string) => String(formData.get(k) ?? "");
+  const name = field("name").trim();
   if (!name) return;
-  const category = String(formData.get("category")) as ProductCategory;
-  const channel = String(formData.get("channel")) as "line" | "email" | "ig_dm";
-  const id = db.transaction((tx) => {
-    const b = tx
-      .insert(brands)
-      .values({ name, category: PRODUCT_CATEGORIES.includes(category) ? category : "home", website: String(formData.get("website") ?? "").trim() || null, createdAt: stamp(today) })
-      .returning({ id: brands.id })
-      .get();
-    tx.insert(brandContacts)
-      .values({
-        brandId: b.id,
-        name: String(formData.get("contactName") ?? "").trim() || "—",
-        role: String(formData.get("contactRole") ?? "").trim() || "—",
-        channel: ["line", "email", "ig_dm"].includes(channel) ? channel : "line",
-        handle: String(formData.get("handle") ?? "").trim() || "—",
-        isPrimary: true,
-      })
-      .run();
-    tx.insert(activities).values({ brandId: b.id, type: "note", channel: "system", summary: "เพิ่มแบรนด์ใน Creator OS", occurredAt: stamp(today) }).run();
-    return b.id;
-  });
+  const { id } = await createBrand({ name, category: field("category"), website: field("website"), contactName: field("contactName"), contactRole: field("contactRole"), channel: field("channel"), handle: field("handle") });
   revalidateAll();
   redirect(`/brands/${id}`);
 }
 
 export async function saveRatesAction(formData: FormData) {
-  const db = getDb();
-  for (const card of db.select().from(rateCard).all()) {
-    const raw = formData.get(`price_${card.code}`);
-    const price = Math.round(Number(raw));
-    if (raw !== null && Number.isFinite(price) && price >= 0 && price !== card.price) db.update(rateCard).set({ price }).where(eq(rateCard.id, card.id)).run();
+  const prices: Record<string, number> = {};
+  for (const [key, raw] of formData.entries()) {
+    if (!key.startsWith("price_")) continue;
+    const price = Number(raw);
+    if (Number.isFinite(price)) prices[key.slice(6)] = price;
   }
+  await saveRatesApi(prices);
   revalidateAll();
 }
 
 /* ───────── Your profile & CRM import ───────── */
 
 export async function saveProfileAction(formData: FormData) {
-  const { setSetting } = await import("@/lib/queries/profile");
-  const { platforms } = await import("@/db/schema");
-  const db = getDb();
-  setSetting(db, "creator_name", String(formData.get("name") ?? "").trim());
-  setSetting(db, "creator_tagline", String(formData.get("tagline") ?? "").trim());
-  const { audienceSnapshots } = await import("@/db/schema");
-  for (const p of ["tiktok", "instagram", "youtube"]) {
-    const handle = String(formData.get(`handle_${p}`) ?? "").trim();
-    db.update(platforms).set({ handle: handle || "—" }).where(eq(platforms.id, p)).run();
-    // A typed follower count goes on the platform's latest snapshot (or this month's, if none yet).
-    const followers = Math.round(Number(String(formData.get(`followers_${p}`) ?? "").replace(/[^\d]/g, "")));
-    if (!followers) continue;
-    const latest = db.select().from(audienceSnapshots).where(eq(audienceSnapshots.platformId, p)).orderBy(sql`${audienceSnapshots.month} desc`).get();
-    if (latest) db.update(audienceSnapshots).set({ followers }).where(eq(audienceSnapshots.id, latest.id)).run();
-    else db.insert(audienceSnapshots).values({ platformId: p, month: getStoryDate(db).slice(0, 7), followers }).run();
-  }
+  const text = (k: string) => String(formData.get(k) ?? "");
+  const platforms = ["tiktok", "instagram", "youtube"];
+  await saveProfileApi({
+    name: text("name"),
+    tagline: text("tagline"),
+    handles: Object.fromEntries(platforms.map((p) => [p, text(`handle_${p}`)])),
+    followers: Object.fromEntries(platforms.map((p) => [p, text(`followers_${p}`)])),
+  });
   revalidateAll();
 }
 
@@ -442,13 +313,9 @@ export async function importWorkbookAction(_prev: ImportState | null, formData: 
 
 /* ───────── Finance ───────── */
 
+/** Paying an invoice is the same event as the deal reaching Paid: the Go API does both and logs the timeline. */
 export async function markInvoicePaid(invoiceId: number) {
-  const db = getDb();
-  const inv = db.select().from(invoices).where(eq(invoices.id, invoiceId)).get();
-  if (!inv || inv.paidAt) return;
-  // Paying the invoice is the same event as the deal reaching Paid (logs the timeline too).
-  await moveDealStage(inv.dealId, "paid");
-  db.update(invoices).set({ paidAt: getStoryDate(db) }).where(and(eq(invoices.id, invoiceId), sql`${invoices.paidAt} is null`)).run();
+  await payInvoice(invoiceId);
   revalidateAll();
 }
 
@@ -471,7 +338,7 @@ export async function askAiAction(question: string, history: ChatTurn[]): Promis
 
 /* ───────── Publisher ───────── */
 
-/** Simulated "now" for publishing = the story date at the 10:00 cron time. */
+/** "Now" for publishing: the real Bangkok time in live mode, the story date at the 10:00 cron time in demo mode. */
 async function publishNow() {
   return stamp(getStoryDate(getDb()));
 }
@@ -484,6 +351,11 @@ export async function publishPostAction(draft: ComposeDraft): Promise<CreateResu
 
 export async function publishJobNowAction(jobId: number) {
   await publishJob(getDb(), jobId, await publishNow());
+  revalidateAll();
+}
+
+export async function retryJobAction(jobId: number) {
+  await retryJob(getDb(), jobId, await publishNow());
   revalidateAll();
 }
 
