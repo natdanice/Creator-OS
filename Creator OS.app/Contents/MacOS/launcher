@@ -1,0 +1,63 @@
+#!/bin/bash
+# Double-click launcher for Creator OS: starts the Go API and the web app (live mode, your real data),
+# then opens the app in your browser. Double-click again while it is running to Open it or Stop it.
+#
+# The app lives in the project folder and finds the project from its own location, so keep
+# "Creator OS.app" next to start.sh. To use the demo data instead, run ./start.sh in a terminal.
+
+MODE=live
+PORT=3000
+API_PORT=8080
+
+APP_DIR="$(cd "$(dirname "$0")/../../.." && pwd)"   # the folder that contains Creator OS.app
+URL="http://127.0.0.1:$PORT"
+LOG="$APP_DIR/.run/launcher.log"
+
+# Apps started from Finder get a bare PATH; add the usual places for node and go.
+export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/local/go/bin:$HOME/go/bin:$PATH"
+
+# Asks Stop or Open; prints the button pressed (nothing, and a non-zero exit, if the dialog is cancelled).
+ask_running() {
+  /usr/bin/osascript -e 'display dialog "Creator OS is already running." with title "Creator OS" buttons {"Stop", "Open"} default button "Open" with icon note' -e 'button returned of result' 2>/dev/null
+}
+
+alert() { /usr/bin/osascript -e 'on run argv' -e 'display dialog (item 1 of argv) with title "Creator OS" buttons {"OK"} default button "OK" with icon caution' -e 'end run' "$1" >/dev/null 2>&1; }
+
+if [ ! -x "$APP_DIR/start.sh" ]; then
+  alert "Can't find start.sh next to Creator OS.app. Keep the app inside the Creator OS project folder."
+  exit 1
+fi
+cd "$APP_DIR" || exit 1
+mkdir -p .run
+
+web_up() { curl -fsS -o /dev/null --max-time 2 "$URL/" 2>/dev/null; }
+api_up() { curl -fsS -o /dev/null --max-time 2 "http://127.0.0.1:$API_PORT/api/v1/health" 2>/dev/null; }
+
+if web_up && api_up; then
+  choice=$(ask_running) || exit 0
+  if [ "$choice" = "Stop" ]; then
+    ./stop.sh >/dev/null 2>&1
+    /usr/bin/osascript -e 'display notification "Creator OS stopped." with title "Creator OS"' >/dev/null 2>&1
+  else
+    open "$URL"
+  fi
+  exit 0
+fi
+
+# Only half running (or a stale start)? Clear it so start.sh doesn't refuse.
+if web_up || api_up || [ -f .run/api.pid ] || [ -f .run/web.pid ]; then
+  ./stop.sh >/dev/null 2>&1
+fi
+
+/usr/bin/osascript -e 'display notification "Starting the API and the app…" with title "Creator OS"' >/dev/null 2>&1
+
+if ./start.sh "$MODE" >"$LOG" 2>&1; then
+  open "$URL"
+else
+  alert "Creator OS didn't start.
+
+$(tail -n 8 "$LOG")
+
+Full log: .run/launcher.log"
+  exit 1
+fi

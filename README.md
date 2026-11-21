@@ -40,6 +40,11 @@ npm install && npm run seed
 # open http://127.0.0.1:3000          ·  ./stop.sh stops both
 ```
 
+**macOS app icon:** double-click **Creator OS.app** (in the project folder) to start the Go API and the web app on
+your real data (live mode) and open it in the browser. Double-click it again while it's running to **Open** or
+**Stop** it. Drag it to the Dock if you like, but keep the app file inside this folder (it finds `start.sh` from
+its own location). If it fails to start, the reason is in `.run/launcher.log`.
+
 `./start.sh live` runs on your real data, and `./start.sh --prod` builds and runs the production servers
 (see [Go API](#go-api-backend)). Requirements: Node 22+ (tested on Node 24.19, macOS) and Go 1.26+ for the API. The SQLite driver ships prebuilt binaries for macOS, Windows and Linux, so no compiler is needed. The database is a single local SQLite file at
 `data/creator-os.db`; no server needed.
