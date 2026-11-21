@@ -2,6 +2,7 @@
 #
 # Creator OS in one image: the Go API (backend/) and the Next.js web app, started together.
 #
+#   ./docker-build.sh              # build and push 3dsinteractive/creator-os:latest
 #   docker build -t creator-os .
 #   docker run --rm -p 127.0.0.1:3000:3000 -v creator-os-data:/app/data creator-os            # demo data
 #   docker run --rm -p 127.0.0.1:3000:3000 -v creator-os-data:/app/data \
@@ -65,7 +66,7 @@ COPY src ./src
 COPY scripts ./scripts
 COPY drizzle ./drizzle
 COPY data/samples ./data/samples
-COPY docker/entrypoint.sh /usr/local/bin/entrypoint
+COPY --chmod=755 docker/entrypoint.sh /usr/local/bin/entrypoint
 
 # Only data/ (the database and uploads) and .next need to be writable, so chown just those: a chown over the
 # whole app would copy node_modules into another image layer.

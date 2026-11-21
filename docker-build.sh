@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Builds the Dockerfile and pushes the image to Docker Hub as 3dsinteractive/mellow:latest.
+# Builds the Dockerfile and pushes the image to Docker Hub as 3dsinteractive/creator-os:latest.
 #
 #   ./docker-build.sh              build, then push
 #   ./docker-build.sh --no-push    build only (to try it locally first)
 #
 # Settings (optional environment variables):
-#   IMAGE=3dsinteractive/mellow:latest   where to push
+#   IMAGE=3dsinteractive/creator-os:latest   where to push
 #   PLATFORM=linux/amd64                 CPU the image is built for (what most servers run). On an Apple Silicon Mac
 #                                        this builds under emulation, which is slower. Use PLATFORM=linux/arm64 for
 #                                        ARM servers, or PLATFORM= (empty) to build for this computer only.
@@ -14,7 +14,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-IMAGE="${IMAGE:-3dsinteractive/mellow:latest}"
+IMAGE="${IMAGE:-3dsinteractive/creator-os:latest}"
 PLATFORM="${PLATFORM-linux/amd64}"
 PUSH=1
 

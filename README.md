@@ -175,7 +175,7 @@ docker run --rm -p 127.0.0.1:3000:3000 -v creator-os-data:/app/data creator-os
 - **Ports:** only the web app (3000) is published, and only on `127.0.0.1`. The Go API and its MCP endpoint stay inside the container.
   To reach them (for an AI assistant on another machine, say), set `API_HOST=0.0.0.0` and `API_TOKEN`, then publish 8080;
   the API refuses to listen beyond localhost without a token. Put HTTPS in front of anything you expose.
-- **Publishing the image:** `./docker-build.sh` builds the Dockerfile and pushes it to `3dsinteractive/mellow:latest` on Docker Hub
+- **Publishing the image:** `./docker-build.sh` builds the Dockerfile and pushes it to `3dsinteractive/creator-os:latest` on Docker Hub
   (`--no-push` builds only; `IMAGE=` and `PLATFORM=` override the target; run `docker login` first). The image contains the
   application source but no data or secrets.
 - **Updates:** `docker compose up --build` rebuilds; new database migrations are applied on start without touching your data.
