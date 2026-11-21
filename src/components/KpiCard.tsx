@@ -1,23 +1,24 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
-import type { Kpi, PlatformKey } from "@/lib/queries/overview";
+import type { Kpi, PlatformKey, RateKpi } from "@/lib/queries/overview";
 import { PLATFORM_KEYS } from "@/lib/queries/overview";
 import { getI18n } from "@/lib/i18n/server";
 import { signedPct } from "@/lib/format";
 
 /** One figure in the Overview strip: value, change vs previous period, thin per-platform split. No box: the strip draws the dividers. */
-export async function KpiCard({ label, kpi, format, additive = true, hint }: { label: string; kpi: Kpi; format: (n: number) => string; additive?: boolean; hint?: string }) {
+export async function KpiCard({ label, kpi, format, additive = true, hint }: { label: string; kpi: Kpi | RateKpi; format: (n: number) => string; additive?: boolean; hint?: string }) {
   const { t } = await getI18n();
-  const change = kpi.prev ? kpi.total / kpi.prev - 1 : 0;
+  const show = (n: number | null) => (n === null ? t.common.none : format(n)); // a ratio with no views is "—", not 0
+  const change = kpi.prev && kpi.total !== null ? kpi.total / kpi.prev - 1 : 0;
   const up = change >= 0;
-  const share = (p: PlatformKey) => (kpi.total ? kpi.byPlatform[p] / kpi.total : 0);
+  const share = (p: PlatformKey) => (kpi.total ? (kpi.byPlatform[p] ?? 0) / kpi.total : 0);
   return (
     <div className="min-w-[72%] snap-start px-5 py-4 first:pl-0 sm:min-w-0 md:px-6">
       <div className="text-sm text-muted" title={hint}>
         {label}
       </div>
       <div className="mt-1 flex items-baseline gap-2">
-        <div className="tabular font-heading text-[28px] font-medium leading-tight">{format(kpi.total)}</div>
-        {kpi.prev > 0 && (
+        <div className="tabular font-heading text-[28px] font-medium leading-tight">{show(kpi.total)}</div>
+        {kpi.prev !== null && kpi.prev > 0 && kpi.total !== null && (
           <span className={`inline-flex items-center text-xs font-medium ${up ? "text-good" : "text-bad"}`} title={t.common.vsPrev}>
             {up ? <ArrowUpRight size={14} aria-hidden /> : <ArrowDownRight size={14} aria-hidden />}
             {signedPct(change)}
@@ -40,7 +41,7 @@ export async function KpiCard({ label, kpi, format, additive = true, hint }: { l
               <span className="h-1.5 w-1.5 rounded-full" style={{ background: `var(--color-${p})` }} aria-hidden />
               <span className="sr-only">{t.platforms[p]}</span>
             </dt>
-            <dd className="tabular text-ink-2">{format(kpi.byPlatform[p])}</dd>
+            <dd className="tabular text-ink-2">{show(kpi.byPlatform[p])}</dd>
           </div>
         ))}
       </dl>

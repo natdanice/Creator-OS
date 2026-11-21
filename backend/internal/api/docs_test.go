@@ -42,6 +42,10 @@ func TestFrontPage(t *testing.T) {
 	if !strings.Contains(body, `"tokenRequired":true`) || !strings.Contains(body, "/api/v1/brands/{id}") {
 		t.Errorf("page data missing")
 	}
+	// The "Connect your AI" section reads the MCP tool table from the page data; its lists must be arrays.
+	if !strings.Contains(body, `"name":"get_brand"`) || strings.Contains(body, `"params":null`) || !strings.Contains(body, `"write":false`) {
+		t.Errorf("MCP tool data missing or has null lists")
+	}
 	// The page is open (it holds no data), the data behind it is not.
 	rec = httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest("GET", "/api/v1/brands", nil))

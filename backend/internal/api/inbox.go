@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
+	"creatoros/internal/crm"
 	"creatoros/internal/inbox"
 )
 
@@ -66,6 +68,13 @@ func (s *Server) inboxThread(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "bad brand id")
 		return
 	}
+	if exists, err := inbox.BrandExists(s.Store.DB, id); err != nil {
+		serverError(w, err)
+		return
+	} else if !exists {
+		writeError(w, crm.NotFound("brand", id))
+		return
+	}
 	t := s.Store.Today()
 	th, err := inbox.GetThread(s.Store.DB, id, t)
 	if err != nil {
@@ -93,6 +102,13 @@ func (s *Server) inboxComments(w http.ResponseWriter, r *http.Request) {
 			f.Platform = p
 		}
 	}
+	f.Limit, f.Offset = 40, 0
+	if n, err := strconv.Atoi(q.Get("limit")); err == nil && n >= 1 && n <= 200 {
+		f.Limit = n
+	}
+	if n, err := strconv.Atoi(q.Get("offset")); err == nil && n >= 0 {
+		f.Offset = n
+	}
 	t := s.Store.Today()
 	rows, total, err := inbox.CommentQueue(s.Store.DB, t, f)
 	if err != nil {
@@ -104,7 +120,10 @@ func (s *Server) inboxComments(w http.ResponseWriter, r *http.Request) {
 		serverError(w, err)
 		return
 	}
-	ok(w, map[string]any{"today": t, "rows": rows, "total": total, "windowDays": inbox.CommentWindowDays, "counts": cc})
+	ok(w, map[string]any{
+		"today": t, "rows": rows, "total": total, "windowDays": inbox.CommentWindowDays, "counts": cc,
+		"status": f.Status, "limit": f.Limit, "offset": f.Offset, "hasMore": f.Offset+len(rows) < total,
+	})
 }
 
 func (s *Server) threadRead(w http.ResponseWriter, r *http.Request) {
@@ -115,7 +134,7 @@ func (s *Server) threadRead(w http.ResponseWriter, r *http.Request) {
 	}
 	n, err := inbox.MarkThreadRead(s.Store, id)
 	if err != nil {
-		serverError(w, err)
+		writeError(w, err)
 		return
 	}
 	ok(w, map[string]any{"changed": n})
@@ -130,11 +149,12 @@ func (s *Server) threadReply(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "need a brand id and a JSON body {\"body\": ...}")
 		return
 	}
-	if err := inbox.SendBrandReply(s.Store, id, in.Body); err != nil {
+	messageID, err := inbox.SendBrandReply(s.Store, id, in.Body)
+	if err != nil {
 		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"ok": true})
+	ok(w, map[string]any{"ok": true, "messageId": messageID})
 }
 
 func (s *Server) briefConvert(w http.ResponseWriter, r *http.Request) {
@@ -147,12 +167,12 @@ func (s *Server) briefConvert(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "need a message id and a JSON body {\"title\", \"value\"}")
 		return
 	}
-	done, err := inbox.ConvertBrief(s.Store, id, in.Title, in.Value)
+	res, err := inbox.ConvertBrief(s.Store, id, in.Title, in.Value)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"converted": done})
+	ok(w, res)
 }
 
 func (s *Server) briefIgnore(w http.ResponseWriter, r *http.Request) {
@@ -161,11 +181,12 @@ func (s *Server) briefIgnore(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "bad message id")
 		return
 	}
-	if err := inbox.IgnoreBrief(s.Store, id); err != nil {
-		serverError(w, err)
+	res, err := inbox.IgnoreBrief(s.Store, id)
+	if err != nil {
+		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"ok": true})
+	ok(w, res)
 }
 
 func (s *Server) commentReply(w http.ResponseWriter, r *http.Request) {
@@ -177,11 +198,12 @@ func (s *Server) commentReply(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "need a comment id and a JSON body {\"text\": ...}")
 		return
 	}
-	if err := inbox.ReplyComment(s.Store, id, in.Text); err != nil {
+	res, err := inbox.ReplyComment(s.Store, id, in.Text)
+	if err != nil {
 		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"ok": true})
+	ok(w, res)
 }
 
 func (s *Server) commentHide(w http.ResponseWriter, r *http.Request) {
@@ -190,9 +212,10 @@ func (s *Server) commentHide(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "bad comment id")
 		return
 	}
-	if err := inbox.HideComment(s.Store, id); err != nil {
+	res, err := inbox.HideComment(s.Store, id)
+	if err != nil {
 		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"ok": true})
+	ok(w, res)
 }

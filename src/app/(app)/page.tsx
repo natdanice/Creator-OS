@@ -157,7 +157,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
         </div>
         <div className="relative -mx-4 flex snap-x overflow-x-auto border-y border-line px-4 sm:mx-0 sm:grid sm:grid-cols-2 sm:overflow-visible sm:px-0 xl:grid-cols-4 [&>*+*]:border-l [&>*+*]:border-line">
           <KpiCard label={t.overview.kpiViews} kpi={data.kpis.views} format={compactNum} />
-          <KpiCard label={t.overview.kpiFollowers} kpi={data.kpis.followers} format={num} />
+          <KpiCard label={t.overview.kpiFollowers} kpi={data.kpis.newFollowers} format={num} />
           <KpiCard label={t.overview.kpiEr} kpi={data.kpis.er} format={(x) => pct(x, 2)} additive={false} />
           <KpiCard label={t.overview.kpiPq} kpi={data.kpis.pq} format={num} hint={t.overview.kpiPqHint} />
         </div>
@@ -268,7 +268,7 @@ export default async function OverviewPage({ searchParams }: { searchParams: Pro
                   </td>
                   <td className="py-2.5 text-ink-2">{t.contentTypes[c.type]}</td>
                   <td className="tabular py-2.5 text-right">{num(c.views)}</td>
-                  <td className="tabular py-2.5 text-right">{pct(c.er)}</td>
+                  <td className="tabular py-2.5 text-right">{c.er === null ? t.common.none : pct(c.er)}</td>
                   <td className="tabular py-2.5 pl-4 text-right">{num(c.newFollowers)}</td>
                 </tr>
               ))}

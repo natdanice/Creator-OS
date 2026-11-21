@@ -153,6 +153,37 @@ database moved to Turso/Postgres first.
 
 ---
 
+## Run with Docker
+
+One image holds both the Go API and the web app (the [Dockerfile](Dockerfile) builds the Go binary and the Next.js app, then
+[docker/entrypoint.sh](docker/entrypoint.sh) prepares the database and starts them together).
+
+```bash
+docker compose up --build            # then open http://127.0.0.1:3000   (demo data)
+# or without compose:
+docker build -t creator-os .
+docker run --rm -p 127.0.0.1:3000:3000 -v creator-os-data:/app/data creator-os
+```
+
+- **Demo vs live:** demo is the default and is seeded on the first start. For your real data add
+  `-e APP_MODE=live -e APP_PASSWORD=… -e AUTH_SECRET=… -e PSEUDONYM_SALT=…` (with compose, put them in a `.env` file next to
+  `docker-compose.yml`). The first live start creates the empty live database; later starts only apply new migrations. Always set
+  `APP_PASSWORD`, and set your own `PSEUDONYM_SALT` before the first import.
+- **Your data lives in the `creator-os-data` volume** (`/app/data`: the SQLite database and uploads), so it survives
+  `docker compose down` and rebuilds. `docker compose down -v` deletes it. `RESET_DEMO=1` re-seeds the demo on every start.
+  The image itself never contains databases, uploads or `.env` files (see [.dockerignore](.dockerignore)).
+- **Ports:** only the web app (3000) is published, and only on `127.0.0.1`. The Go API and its MCP endpoint stay inside the container.
+  To reach them (for an AI assistant on another machine, say), set `API_HOST=0.0.0.0` and `API_TOKEN`, then publish 8080;
+  the API refuses to listen beyond localhost without a token. Put HTTPS in front of anything you expose.
+- **Publishing the image:** `./docker-build.sh` builds the Dockerfile and pushes it to `3dsinteractive/mellow:latest` on Docker Hub
+  (`--no-push` builds only; `IMAGE=` and `PLATFORM=` override the target; run `docker login` first). The image contains the
+  application source but no data or secrets.
+- **Updates:** `docker compose up --build` rebuilds; new database migrations are applied on start without touching your data.
+- The image runs as a non-root user and has a health check on both servers. Hosting it needs a disk that survives restarts
+  (the same constraint as live mode, see *Hosting live*).
+
+---
+
 ## Go API (`backend/`)
 
 A Go service that owns the app's data and business rules and serves them as JSON to the frontend. It reads and
@@ -173,6 +204,7 @@ form. (A test makes sure no endpoint is missing from that page.)
 | Audience | `GET audience` · `GET audience/segments/{id}/members` · `GET audience/members/{pseudoId}` |
 | Automation | `GET automation` · `POST automation/rules/{id}/enabled` · `POST automation/reset` · `POST tasks/{id}/complete\|dismiss` |
 | Settings | `GET settings` · `PUT settings/rates` · `PUT settings/profile` |
+| MCP | `POST /mcp` ([for AI assistants](#mcp-let-an-ai-assistant-use-creator-os)) |
 
 The frontend calls it from server code only (`src/lib/api.ts`). **On Go now:** Overview, Brands, Brand 360,
 Pipeline, Finance, Inbox, Audience, Automation (everything after a task is drafted) and the Settings profile,
@@ -199,38 +231,68 @@ sending (Gmail drafts, LINE messages).
 
 ---
 
-## MCP server (`mcp/`) — for external AI
+## MCP: let an AI assistant use Creator OS
 
-An [MCP](https://modelcontextprotocol.io) server that lets an outside AI (Claude Desktop, Claude Code, Cursor…)
-read your Creator OS data. It is a thin layer over the Go API, so the Go API must be running (`./start.sh`).
-It talks over stdio and starts on demand: you don't run it yourself.
+[MCP](https://modelcontextprotocol.io) lets an AI app (Claude, Cursor, …) call Creator OS as a set of tools. There are
+two ways in, both with the same tools. Start the API first (`./start.sh`, or double-click **Creator OS API.app**).
 
-**Read-only by default (17 tools):** `get_context`, `get_today`, `get_overview`, `list_brands`, `get_brand`,
-`get_pipeline`, `get_finance`, `export_income_csv`, `get_inbox`, `list_inbox_threads`, `get_inbox_thread`,
-`list_comments`, `get_audience`, `list_segment_members`, `get_audience_member`, `get_automation`, `get_settings`.
+### 1. By URL: built into the Go API (recommended)
 
-**Writes are opt-in:** set `CREATOR_OS_MCP_WRITE=1` to add `create_brand`, `move_deal_stage` and
-`mark_invoice_paid`. Sending anything to a brand or fan (inbox and comment replies, completing automation tasks),
-changing settings and account credentials are never exposed: those stay in the app.
+The API serves MCP at **`http://127.0.0.1:8080/mcp`**. Open the API's front page at `http://127.0.0.1:8080/` and use the
+**Connect your AI** box at the top: it shows the URL, copy-paste setup for Claude Code, Cursor / VS Code and Claude Desktop,
+a **Test connection** button and every tool. Nothing to install and no code to clone on the AI's side.
 
-Add it to your AI app's MCP config (use the absolute path to this folder):
+```bash
+claude mcp add --transport http creator-os http://127.0.0.1:8080/mcp     # Claude Code
+```
+
+- **Everything the app can do is a tool: 32 tools, 17 to read and 15 to change data.** (A test fails if an API endpoint ever lacks a tool.)
+  - *Read:* `get_context`, `get_today`, `get_overview`, `list_brands`, `get_brand`, `get_pipeline`, `get_finance`, `export_income_csv`,
+    `get_inbox`, `list_inbox_threads`, `get_inbox_thread`, `list_comments`, `get_audience`, `list_segment_members`,
+    `get_audience_member`, `get_automation`, `get_settings`.
+  - *Write:* `create_brand`, `move_deal_stage`, `mark_invoice_paid`, `mark_thread_read`, `reply_to_brand`, `convert_brief`,
+    `ignore_brief`, `reply_to_comment`, `hide_comment`, `set_automation_rule_enabled`, `complete_task`, `dismiss_task`,
+    `reset_automation` (needs `confirm: true`), `save_rates`, `save_profile` (only the fields you pass change).
+- **Writes are on by default and edit your real records.** Set `MCP_READ_ONLY=1` on the API to hide the write tools. Write tools carry
+  MCP hints (destructive / idempotent) so AI apps can ask you before running the risky ones, and every write is logged by the API.
+- **Answers an AI can act on.** Unknown ids are errors that say what was looked up (`No brand with id 999`, `No such segment "nope"`);
+  a no-op says why (`converted: false, reason: "already turned into deal 12"`, `alreadyPaid: true`); writes return the ids they
+  create (`dealId`, `messageId`); `create_brand`, `save_rates` and `save_profile` validate instead of guessing or silently
+  ignoring (and refuse bad input with the allowed values); lists are paged (`list_comments`: `limit`, `offset`, `hasMore`).
+  Timestamps carry the Bangkok offset (`+07:00`); unknown arguments are refused; JSON-RPC batching is rejected (removed from MCP in 2025-06-18).
+- **A deal, its invoice, income and the brand tier never disagree.** An invoice exists only while the deal is Invoiced or Paid; moving a
+  deal back before Invoiced cancels an unpaid invoice, and a deal whose invoice is already paid can't move back (the move is refused and says why).
+- **Nothing is ever sent to a brand or fan from here.** In Creator OS a "reply" is a record in the thread and timeline: the Gmail
+  drafts and LINE messages are made by the web app when you click. The tool descriptions say so, so an AI shouldn't claim it sent anything.
+  Account credentials are not in the API, so they can't be reached.
+- **Sharing it with other people:** the API only accepts local connections unless `API_TOKEN` is set. To let others connect,
+  set `API_TOKEN`, listen beyond localhost (`API_HOST=0.0.0.0`) and put it behind HTTPS (a reverse proxy or tunnel); each person's AI
+  then sends `Authorization: Bearer <API_TOKEN>` (the front page's snippets show where). Whoever has the token can read **and change
+  everything** in the database it serves (use `MCP_READ_ONLY=1` for people who should only look), so give it only to people you'd
+  hand your books to, and use demo mode for public demos.
+- **Using it for your own data:** it is the same platform for anyone. Run your own copy in live mode (see *Going live*) and
+  your AI sees and manages your own brands, deals and audience.
+
+### 2. By local command: `mcp/server.ts` (stdio)
+
+For AI apps that can only launch a local command. It holds no tools of its own: it forwards to the API's `/mcp`, so you get the
+same 32 tools (or 17 with `MCP_READ_ONLY=1`), and the API must be running. Add it to the app's MCP config:
 
 ```json
 {
   "mcpServers": {
     "creator-os": {
-      "command": "npm",
+      "command": "/usr/local/bin/npm",
       "args": ["--silent", "--prefix", "/absolute/path/to/Creator OS", "run", "mcp"],
-      "env": { "CREATOR_OS_API_URL": "http://127.0.0.1:8080" }
+      "env": { "PATH": "/usr/local/bin:/usr/bin:/bin", "CREATOR_OS_API_URL": "http://127.0.0.1:8080" }
     }
   }
 }
 ```
 
-Claude Code: `claude mcp add creator-os -- npm --silent --prefix "/absolute/path/to/Creator OS" run mcp`.
-Settings: `CREATOR_OS_API_URL` (default `http://127.0.0.1:8080`), `CREATOR_OS_API_TOKEN` (the Go API's `API_TOKEN`, if set),
-`CREATOR_OS_MCP_WRITE`. Whichever database the Go API runs on (demo or live) is what the AI sees, so in live mode
-it can read your real brands, invoices and audience: only connect AI apps you trust with that.
+Settings: `CREATOR_OS_API_URL` (default `http://127.0.0.1:8080`) and `CREATOR_OS_API_TOKEN` (the API's `API_TOKEN`, if set).
+Whichever database the Go API runs on (demo or live) is what the AI sees and changes: in live mode that is your real data, so only
+connect AI apps you trust with it.
 
 ---
 
@@ -467,15 +529,16 @@ Count deals at stage **Paid** with `closed_at` in the 365 days ending today:
 | One-time | 1 |
 | Lead | 0 (includes brands whose only paid work is older than 12 months) |
 
-Other definitions: **won deal** = stage Production or later · **deal value this year** = Σ won deals
-created in the current calendar year · **jobs** = # won deals · **LTV** = Σ won deals ·
+Other definitions: **won deal** = stage Production or later (committed, paid or not) · **deal value this year** = Σ won deals
+created in the current calendar year · **jobs** = # *paid* deals · **LTV** = Σ *paid* deals (money actually earned: work that is
+won but not yet paid is in deal value this year and the finance "expected" figure, not in jobs or LTV) ·
 **avg deal size** = LTV ÷ jobs · **days since last job** = today − latest `posted_at` ·
 **silent** = has a won deal, no open deal, no activity for ≥ 120 days ·
 **engagement rate** = (likes + comments + shares + saves) ÷ views ·
 **+N days** = cumulative metrics for posting day … day N−1 (shown once today ≥ posted + N).
 
 ### Recommended next offer (`src/crm/nextOffer.ts`, first match wins, reason shown)
-1. Lead (never won) → TikTok video starter
+1. Lead (never paid) → TikTok video starter
 2. Silent ≥ 120 days → their last package, with follower growth since then
 3. Partner → quarterly retainer
 4. Bought a single platform only and their sponsored ER ≥ creator's sponsored median → 3-platform bundle

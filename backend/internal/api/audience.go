@@ -7,6 +7,7 @@ import (
 	"creatoros/internal/audience"
 	"creatoros/internal/cdp"
 	"creatoros/internal/model"
+	"creatoros/internal/settings"
 )
 
 func (s *Server) routeAudience(mux *http.ServeMux) {
@@ -78,10 +79,18 @@ func (s *Server) audienceOverview(w http.ResponseWriter, r *http.Request) {
 			spiking = append(spiking, "askers_"+sp.Category)
 		}
 	}
+	latest, err := settings.LatestFollowers(db, t)
+	if err != nil {
+		serverError(w, err)
+		return
+	}
+	// latestFollowers is the current follower count per platform (the same number Settings shows).
+	// demographics.followers is the count in the month the split was measured (splitMonth), which can be older.
 	ok(w, map[string]any{
 		"today": t, "months": months, "month": nilIfEmpty(month), "platform": platform,
 		"series": series, "splitMonth": splitMonth, "demographics": demo,
-		"segments": seg, "spikingSegments": spiking,
+		"latestFollowers": latest,
+		"segments":        seg, "spikingSegments": spiking,
 	})
 }
 
@@ -101,7 +110,7 @@ func (s *Server) segmentMembers(w http.ResponseWriter, r *http.Request) {
 	}
 	id := r.PathValue("id")
 	if !seg.Has(id) {
-		fail(w, http.StatusNotFound, "no such segment")
+		fail(w, http.StatusNotFound, "No such segment "+strconv.Quote(id)+" (get_audience lists the segment ids)")
 		return
 	}
 	limit := 30
@@ -120,7 +129,7 @@ func (s *Server) audienceMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p == nil {
-		fail(w, http.StatusNotFound, "no such person")
+		fail(w, http.StatusNotFound, "No audience member with id "+strconv.Quote(r.PathValue("id")))
 		return
 	}
 	ok(w, map[string]any{"today": t, "profile": p})

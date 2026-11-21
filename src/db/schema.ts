@@ -187,6 +187,7 @@ export const ACTIVITY_TYPES = [
   "brief_received",
   "quote_sent",
   "draft_sent",
+  "stage_change",
   "revision",
   "posted",
   "report_sent",

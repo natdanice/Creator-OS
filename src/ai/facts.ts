@@ -87,7 +87,7 @@ export function gatherFacts(db: DB, today: string, i18n: I18n) {
     },
     content: {
       window: ov.window,
-      totals28d: { views: ov.kpis.views.total, newFollowers: ov.kpis.followers.total, er: ov.kpis.er.total, productQuestions: ov.kpis.pq.total },
+      totals28d: { views: ov.kpis.views.total, newFollowers: ov.kpis.newFollowers.total, er: ov.kpis.er.total, productQuestions: ov.kpis.pq.total },
       // One entry per video: the same video on several platforms is added together.
       top: ov.top.slice(0, 5).map((c) => ({ title: c.title, platforms: c.posts.map((p) => p.platformId), viewsByPlatform: Object.fromEntries(c.posts.map((p) => [p.platformId, p.views])), type: c.type, views: c.views, er: c.er, sponsored: c.isSponsored })),
       bestTypeForFollowers: ov.insight.headline && ov.insight.headline.best ? { platform: ov.insight.headline.platformId, type: ov.insight.headline.best.type, followersPer1kViews: ov.insight.headline.best.fpk, liftVsPlatformAvg: ov.insight.headline.lift } : null,

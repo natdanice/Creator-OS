@@ -117,6 +117,7 @@ func TestBadRequests(t *testing.T) {
 		{"POST", "/api/v1/deals/999/stage", `{"stage":"paid"}`, 404},
 		{"POST", "/api/v1/invoices/999/paid", ``, 404},
 		{"POST", "/api/v1/brands", `{"name":""}`, 400},
+		{"POST", "/api/v1/brands", `{"name":"X","category":"cars"}`, 400},
 		{"GET", "/api/v1/finance/export?year=abcd", ``, 400},
 		{"GET", "/api/v1/nothing", ``, 404},
 		{"DELETE", "/api/v1/brands", ``, 404},
@@ -126,8 +127,15 @@ func TestBadRequests(t *testing.T) {
 			t.Errorf("%s %s %q → %d (%s), want %d", c.method, c.path, c.body, code, raw, c.want)
 		}
 	}
-	if code, m, _ := do(t, "POST", ts.URL+"/api/v1/brands", `{"name":"New Co"}`, ""); code != 201 || m["id"] == nil {
+	if code, m, _ := do(t, "POST", ts.URL+"/api/v1/brands", `{"name":"New Co","category":"food"}`, ""); code != 201 || m["id"] == nil {
 		t.Errorf("create brand: %d %v", code, m)
+	}
+	// No guessing: a missing or unknown category is refused, and a brand name can't be used twice.
+	if code, _, raw := do(t, "POST", ts.URL+"/api/v1/brands", `{"name":"No Cat"}`, ""); code != 400 || !strings.Contains(raw, "category must be one of") {
+		t.Errorf("missing category: %d %s", code, raw)
+	}
+	if code, _, raw := do(t, "POST", ts.URL+"/api/v1/brands", `{"name":" new co ","category":"tech"}`, ""); code != 409 || !strings.Contains(raw, "already exists") {
+		t.Errorf("duplicate name: %d %s", code, raw)
 	}
 }
 

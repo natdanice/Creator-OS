@@ -28,6 +28,13 @@ type Kpi struct {
 	ByPlatform map[string]float64 `json:"byPlatform"`
 }
 
+// RateKpi is Kpi for a ratio such as the engagement rate: it is null (not 0) where there were no views to divide by.
+type RateKpi struct {
+	Total      *float64            `json:"total"`
+	Prev       *float64            `json:"prev"`
+	ByPlatform map[string]*float64 `json:"byPlatform"`
+}
+
 type Window struct {
 	Start     string `json:"start"`
 	End       string `json:"end"`
@@ -53,7 +60,7 @@ type TopContent struct {
 	Posts        []TopPost `json:"posts"`
 	Views        int       `json:"views"`
 	NewFollowers int       `json:"newFollowers"`
-	ER           float64   `json:"er"`
+	ER           *float64  `json:"er"` // null when the video had no views
 }
 
 type TypeLift struct {
@@ -75,11 +82,16 @@ type Insight struct {
 
 type Data struct {
 	Window Window `json:"window"`
-	Kpis   struct {
-		Views     Kpi `json:"views"`
-		Followers Kpi `json:"followers"`
-		ER        Kpi `json:"er"`
-		PQ        Kpi `json:"pq"`
+	// DataAsOf is the newest day that has any views/likes data (up to today); LastImportAt is when the last successful
+	// import finished. When DataAsOf is long before the window's end, the KPIs below are zeros because nothing has been
+	// imported since, not because nothing happened.
+	DataAsOf     *string `json:"dataAsOf"`
+	LastImportAt *string `json:"lastImportAt"`
+	Kpis         struct {
+		Views        Kpi     `json:"views"`
+		NewFollowers Kpi     `json:"newFollowers"` // followers gained in the window (not the follower total: see latestFollowers on the Audience endpoint)
+		ER           RateKpi `json:"er"`
+		PQ           Kpi     `json:"pq"`
 	} `json:"kpis"`
 	Series []SeriesDay  `json:"series"`
 	Top    []TopContent `json:"top"`
@@ -178,7 +190,7 @@ func pqCounts(db *sql.DB, start, end string) (map[string]int, error) {
 	return out, rows.Err()
 }
 
-func er(rows []metrics) float64 {
+func er(rows []metrics) *float64 {
 	var a metrics
 	for _, r := range rows {
 		a.Views += r.Views
@@ -187,7 +199,16 @@ func er(rows []metrics) float64 {
 		a.Shares += r.Shares
 		a.Saves += r.Saves
 	}
-	return crm.EngagementRate(a.Views, a.Likes, a.Comments, a.Shares, a.Saves)
+	return rate(a.Views, a.Likes, a.Comments, a.Shares, a.Saves)
+}
+
+// rate is the engagement rate, or nil when there were no views.
+func rate(views, likes, comments, shares, saves int) *float64 {
+	if views <= 0 {
+		return nil
+	}
+	v := crm.EngagementRate(views, likes, comments, shares, saves)
+	return &v
 }
 
 func kpiOf(cur, prev []metrics, pick func(metrics) int) Kpi {
@@ -205,6 +226,24 @@ func kpiOf(cur, prev []metrics, pick func(metrics) int) Kpi {
 	return k
 }
 
+// freshness reports the newest day with any metrics (up to today) and when the last successful import finished.
+func freshness(db *sql.DB, today string) (dataAsOf, lastImportAt *string, err error) {
+	var a, b sql.NullString
+	if err = db.QueryRow(`SELECT MAX(d) FROM (SELECT MAX(date) AS d FROM content_metrics_daily WHERE date <= ? UNION ALL SELECT MAX(date) FROM account_daily WHERE date <= ?)`, today, today).Scan(&a); err != nil {
+		return nil, nil, err
+	}
+	if err = db.QueryRow(`SELECT MAX(finished_at) FROM import_runs WHERE status IN ('success', 'partial')`).Scan(&b); err != nil {
+		return nil, nil, err
+	}
+	if a.Valid {
+		dataAsOf = &a.String
+	}
+	if b.Valid {
+		lastImportAt = &b.String
+	}
+	return dataAsOf, lastImportAt, nil
+}
+
 // Compute builds the Overview for the `rng` days ending on `today`.
 func Compute(db *sql.DB, today string, rng int) (*Data, error) {
 	start, end := dates.WindowEnding(today, rng)
@@ -220,8 +259,11 @@ func Compute(db *sql.DB, today string, rng int) (*Data, error) {
 	}
 	d := &Data{Window: Window{start, end, prevStart, prevEnd}}
 	d.Kpis.Views = kpiOf(cur, prev, func(m metrics) int { return m.Views })
-	d.Kpis.Followers = kpiOf(cur, prev, func(m metrics) int { return m.NewFollowers })
-	d.Kpis.ER = Kpi{Total: er(cur), Prev: er(prev), ByPlatform: map[string]float64{}}
+	d.Kpis.NewFollowers = kpiOf(cur, prev, func(m metrics) int { return m.NewFollowers })
+	d.Kpis.ER = RateKpi{Total: er(cur), Prev: er(prev), ByPlatform: map[string]*float64{}}
+	if d.DataAsOf, d.LastImportAt, err = freshness(db, today); err != nil {
+		return nil, err
+	}
 	for _, p := range model.PlatformKeys {
 		var mine []metrics
 		for _, r := range cur {
@@ -445,7 +487,7 @@ func topContent(db *sql.DB, rows []postRow, limit int) ([]TopContent, int, int, 
 		c.Key = strings.Join(keys, "-")
 		c.Title, c.Type, c.PostedAt = members[0].Title, members[0].Type, first.PostedAt
 		c.Views, c.NewFollowers = sum.Views, sum.NewFollowers
-		c.ER = crm.EngagementRate(sum.Views, sum.Likes, sum.Comments, sum.Shares, sum.Saves)
+		c.ER = rate(sum.Views, sum.Likes, sum.Comments, sum.Shares, sum.Saves)
 		top = append(top, c)
 	}
 	sort.SliceStable(top, func(i, j int) bool { return top[i].Views > top[j].Views })

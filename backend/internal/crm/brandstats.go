@@ -77,15 +77,19 @@ func ComputeBrandStats(db *sql.DB, today string) ([]BrandStats, error) {
 			}
 		}
 		var lastJob string
+		won := 0 // committed deals (Production or later): paid or not
 		for _, d := range ds {
 			if d.Stage == "paid" && d.ClosedAt != nil {
 				if day := dates.Day(*d.ClosedAt); day >= windowStart && day <= today {
 					s.PaidInWindow++
 				}
 			}
-			if IsWon(d.Stage) {
+			if d.Stage == "paid" { // jobs and lifetime value are money actually earned
 				s.Jobs++
 				s.LifetimeValue += d.Value
+			}
+			if IsWon(d.Stage) {
+				won++
 				if len(d.CreatedAt) >= 4 && d.CreatedAt[:4] == year {
 					s.DealValueThisYear += d.Value
 				}
@@ -109,7 +113,7 @@ func ComputeBrandStats(db *sql.DB, today string) ([]BrandStats, error) {
 			days := dates.DiffDays(at, today)
 			s.LastActivityAt, s.DaysSinceLastActivity = &at, &days
 		}
-		s.IsSilent = s.Jobs > 0 && s.OpenDeals == 0 && s.DaysSinceLastActivity != nil && *s.DaysSinceLastActivity >= SilentDays
+		s.IsSilent = won > 0 && s.OpenDeals == 0 && s.DaysSinceLastActivity != nil && *s.DaysSinceLastActivity >= SilentDays
 		out = append(out, s)
 	}
 	return out, nil

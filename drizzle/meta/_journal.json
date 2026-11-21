@@ -43,6 +43,13 @@
       "when": 1794623332258,
       "tag": "0005_publish_live",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1795233551082,
+      "tag": "0006_bundle_description",
+      "breakpoints": true
     }
   ]
 }

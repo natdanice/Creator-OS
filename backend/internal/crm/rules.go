@@ -3,7 +3,9 @@
 //
 //	TIERS (computed, never stored): count deals that reached Paid with closed_at inside the 365 days
 //	ending today. Partner >= 3, Repeat = 2, One-time = 1, Lead = 0.
-//	WON deal = stage Production or later. Silent = a won deal, no open deal, no activity for 120+ days.
+//	WON deal = stage Production or later (the brand has committed). Silent = a won deal, no open deal, no
+//	activity for 120+ days. Jobs and lifetime value count only PAID deals (money actually earned); the value of
+//	won-but-unpaid deals is in dealValueThisYear and in the finance "expected" figure, never in lifetime value.
 package crm
 
 import "creatoros/internal/model"

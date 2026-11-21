@@ -181,19 +181,45 @@ func TestSettingsSaves(t *testing.T) {
 	if _, ok := f["instagram"]; ok {
 		t.Errorf("empty follower input must not create a snapshot: %v", f)
 	}
-	// Prices: unknown codes, negatives and unchanged prices are ignored; decimals round.
-	_, m, _ := do(t, "PUT", url+"/api/v1/settings/rates", `{"prices":{"TT_VIDEO":21000.4,"IG_REEL":25000,"NOPE":5,"BAD":-1}}`, "")
-	if m["changed"].(float64) != 1 {
-		t.Errorf("changed: %v", m)
+	// Prices are whole baht and must name real codes: anything else is refused and nothing is saved.
+	for _, c := range []struct{ body, want string }{
+		{`{"prices":{"TT_VIDEO":21000,"NOPE":5}}`, "Unknown rate-card code(s): NOPE"},
+		{`{"prices":{"tt_video":21000}}`, "case-sensitive"},
+		{`{"prices":{"TT_VIDEO":21000.4}}`, "whole baht"},
+		{`{"prices":{"TT_VIDEO":-5}}`, "whole baht"},
+		{`{"prices":{"TT_VIDEO":1e15}}`, "whole baht"},
+		{`{"prices":{}}`, "prices is empty"},
+	} {
+		code, m, raw := do(t, "PUT", url+"/api/v1/settings/rates", c.body, "")
+		if code != 400 || !strings.Contains(raw, c.want) {
+			t.Errorf("%s → %d %v, want a 400 containing %q", c.body, code, m["error"], c.want)
+		}
 	}
-	_, _, raw := do(t, "GET", url+"/api/v1/settings", "", "")
-	if !strings.Contains(raw, `"code":"TT_VIDEO"`) || !strings.Contains(raw, `"price":21000`) {
+	if _, _, raw := do(t, "GET", url+"/api/v1/settings", "", ""); !strings.Contains(raw, `"price":20000`) {
+		t.Errorf("a refused save must not change prices: %s", raw)
+	}
+	_, m, _ := do(t, "PUT", url+"/api/v1/settings/rates", `{"prices":{"TT_VIDEO":21000,"IG_REEL":25000}}`, "")
+	if m["changed"].(float64) != 1 || len(m["updated"].([]any)) != 1 {
+		t.Errorf("one price changed, one was the same: %v", m)
+	}
+	if _, _, raw := do(t, "GET", url+"/api/v1/settings", "", ""); !strings.Contains(raw, `"price":21000`) {
 		t.Errorf("price not saved: %s", raw)
 	}
-	if code, _, _ := do(t, "PUT", url+"/api/v1/settings/rates", `{"prices":{"TT_VIDEO":-5}}`, ""); code != 200 {
-		t.Errorf("negative price is ignored, not an error: %d", code)
+
+	// Follower counts: whole numbers, optionally with thousands separators. Decimals are rejected, not glued into 15.
+	for _, bad := range []string{"1.5", "12.500", "abc", "-3", "1,5", "12 500", "1e3"} {
+		body := `{"name":"Nat","tagline":"hi","handles":{"tiktok":"@nat"},"followers":{"tiktok":"` + bad + `"}}`
+		if code, _, raw := do(t, "PUT", url+"/api/v1/settings/profile", body, ""); code != 400 || !strings.Contains(raw, "followers.tiktok") {
+			t.Errorf("follower count %q: %d %s", bad, code, raw)
+		}
 	}
-	if _, _, raw = do(t, "GET", url+"/api/v1/settings", "", ""); !strings.Contains(raw, `"price":21000`) {
-		t.Errorf("negative price must not be saved: %s", raw)
+	if f := read()["latestFollowers"].(map[string]any); f["tiktok"].(float64) != 12500 {
+		t.Errorf("a refused profile save must not change counts: %v", f)
+	}
+	if code, _, _ := do(t, "PUT", url+"/api/v1/settings/profile", `{"name":"Nat","tagline":"hi","handles":{},"followers":{"tiktok":"13,000"}}`, ""); code != 200 {
+		t.Errorf("13,000 should be accepted: %d", code)
+	}
+	if f := read()["latestFollowers"].(map[string]any); f["tiktok"].(float64) != 13000 {
+		t.Errorf("followers: %v", f)
 	}
 }

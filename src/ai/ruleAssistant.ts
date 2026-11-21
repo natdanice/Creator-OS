@@ -91,7 +91,7 @@ export class RuleAssistant implements Assistant {
       src.add("finance");
     } else if (intent === "best") {
       lines.push(fmt(a.bestIntro, { start: i18n.dateShort(f.content.window.start), end: i18n.dateShort(f.content.window.end) }));
-      for (const c of f.content.top.slice(0, 3)) lines.push(fmt(a.bestLine, { title: c.title, platform: c.platforms.map((p) => t.platforms[p]).join(" + "), views: num(c.views), er: pct(c.er) }));
+      for (const c of f.content.top.slice(0, 3)) lines.push(fmt(a.bestLine, { title: c.title, platform: c.platforms.map((p) => t.platforms[p]).join(" + "), views: num(c.views), er: c.er === null ? t.common.none : pct(c.er) }));
       const h = f.content.bestTypeForFollowers;
       if (h) lines.push(fmt(t.overview.insightFpv, { platform: t.platforms[h.platform], type: t.contentTypes[h.type], fpk: h.followersPer1kViews.toFixed(1), x: h.liftVsPlatformAvg.toFixed(1) }));
       src.add("overview");

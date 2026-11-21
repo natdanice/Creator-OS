@@ -16,6 +16,25 @@ export interface Kpi {
   byPlatform: Record<PlatformKey, number>;
 }
 
+/** A ratio such as the engagement rate: null (not 0) where there were no views to divide by. */
+export interface RateKpi {
+  total: number | null;
+  prev: number | null;
+  byPlatform: Record<PlatformKey, number | null>;
+}
+
+/** Engagement rate, or null when there were no views. */
+export function rateOrNull(m: { views: number; likes: number; comments: number; shares: number; saves: number }): number | null {
+  return m.views > 0 ? engagementRate(m) : null;
+}
+
+/** Newest day with any views/likes data (up to today) and when the last successful import finished. */
+export function dataFreshness(db: DB, today: string): { dataAsOf: string | null; lastImportAt: string | null } {
+  const dataAsOf = db.get<{ d: string | null }>(sql`select max(d) as d from (select max(date) as d from content_metrics_daily where date <= ${today} union all select max(date) from account_daily where date <= ${today})`)?.d ?? null;
+  const lastImportAt = db.get<{ d: string | null }>(sql`select max(finished_at) as d from import_runs where status in ('success', 'partial')`)?.d ?? null;
+  return { dataAsOf, lastImportAt };
+}
+
 /** Per-platform totals. Where account-level daily data exists (e.g. TikTok Studio overview), it wins over summed posts. */
 function metricTotals(db: DB, start: string, end: string) {
   const fromPosts = postTotals(db, start, end);
@@ -83,11 +102,11 @@ export function overviewData(db: DB, today: string, range: number) {
       prev.map((r) => ({ platformId: r.platformId, v: pick(r) })),
     );
   const erRow = (rows: typeof cur) =>
-    engagementRate(rows.reduce((a, r) => ({ views: a.views + r.views, likes: a.likes + r.likes, comments: a.comments + r.comments, shares: a.shares + r.shares, saves: a.saves + r.saves }), { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }));
-  const er: Kpi = {
+    rateOrNull(rows.reduce((a, r) => ({ views: a.views + r.views, likes: a.likes + r.likes, comments: a.comments + r.comments, shares: a.shares + r.shares, saves: a.saves + r.saves }), { views: 0, likes: 0, comments: 0, shares: 0, saves: 0 }));
+  const er: RateKpi = {
     total: erRow(cur),
     prev: erRow(prev),
-    byPlatform: Object.fromEntries(PLATFORM_KEYS.map((p) => [p, erRow(cur.filter((r) => r.platformId === p))])) as Record<PlatformKey, number>,
+    byPlatform: Object.fromEntries(PLATFORM_KEYS.map((p) => [p, erRow(cur.filter((r) => r.platformId === p))])) as Record<PlatformKey, number | null>,
   };
   const pqCur = pqCounts(db, start, end);
   const pqPrev = pqCounts(db, prevStart, prevEnd);
@@ -139,9 +158,10 @@ export function overviewData(db: DB, today: string, range: number) {
 
   return {
     window: { start, end, prevStart, prevEnd },
+    ...dataFreshness(db, today),
     kpis: {
       views: kpiOf((r) => r.views),
-      followers: kpiOf((r) => r.newFollowers),
+      newFollowers: kpiOf((r) => r.newFollowers),
       er,
       pq: toKpi(
         pqCur.map((r) => ({ platformId: r.platformId, v: r.n })),
@@ -184,7 +204,7 @@ export interface TopContent {
   posts: { id: number; platformId: PlatformKey; views: number }[]; // most views first
   views: number;
   newFollowers: number;
-  er: number;
+  er: number | null;
 }
 
 /**
@@ -216,7 +236,7 @@ function topContent(db: DB, rows: PostRow[], limit = 8): { top: TopContent[]; pi
         posts: members.map((m) => ({ id: m.id, platformId: m.platformId as PlatformKey, views: m.views })),
         views: sum("views"),
         newFollowers: sum("newFollowers"),
-        er: engagementRate({ views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares"), saves: sum("saves") }),
+        er: rateOrNull({ views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares"), saves: sum("saves") }),
       };
     })
     .sort((a, b) => b.views - a.views)

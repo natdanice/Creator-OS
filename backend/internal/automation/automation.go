@@ -7,6 +7,7 @@ package automation
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 
 	"creatoros/internal/crm"
 	"creatoros/internal/model"
@@ -116,14 +117,35 @@ func SetRuleEnabled(db *sql.DB, id string, enabled bool) error {
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return crm.ErrNotFound
+		return crm.NotFoundMsg(fmt.Sprintf("No automation rule with id %q", id))
 	}
 	return nil
 }
 
-func Dismiss(db *sql.DB, taskID int) error {
-	_, err := db.Exec(`UPDATE tasks SET status = 'dismissed' WHERE id = ?`, taskID)
-	return err
+// DismissResult says what dismissing a task did.
+type DismissResult struct {
+	OK        bool   `json:"ok"`
+	Dismissed bool   `json:"dismissed"`
+	Reason    string `json:"reason,omitempty"` // why nothing changed
+}
+
+// Dismiss closes an open task without doing it. A task that is already done or dismissed changes nothing and says so.
+func Dismiss(db *sql.DB, taskID int) (DismissResult, error) {
+	var status string
+	err := db.QueryRow(`SELECT status FROM tasks WHERE id = ?`, taskID).Scan(&status)
+	if err == sql.ErrNoRows {
+		return DismissResult{}, crm.NotFound("task", taskID)
+	}
+	if err != nil {
+		return DismissResult{}, err
+	}
+	if status != "open" {
+		return DismissResult{OK: true, Reason: fmt.Sprintf("Task %d is already %s.", taskID, status)}, nil
+	}
+	if _, err := db.Exec(`UPDATE tasks SET status = 'dismissed' WHERE id = ? AND status = 'open'`, taskID); err != nil {
+		return DismissResult{}, err
+	}
+	return DismissResult{OK: true, Dismissed: true}, nil
 }
 
 // Reset removes every task and the run history (the demo's "start over").
@@ -150,11 +172,13 @@ var doneActivity = map[string]string{
 
 // Completed describes a task that was just approved, so the caller can make follow-ups (a Gmail draft).
 type Completed struct {
-	Done    bool   `json:"done"`
-	Title   string `json:"title"`
-	Channel string `json:"channel"`
-	BrandID *int   `json:"brandId"`
-	Body    string `json:"body"`
+	Done      bool   `json:"done"`
+	Title     string `json:"title"`
+	Channel   string `json:"channel"`
+	BrandID   *int   `json:"brandId"`
+	Body      string `json:"body"`
+	MessageID *int   `json:"messageId"`        // the message recorded in the brand's thread, if the task had a brand and a channel
+	Reason    string `json:"reason,omitempty"` // why nothing changed (Done is false)
 }
 
 // Complete is the human approving a drafted task (after editing it): the task is done, the message
@@ -170,11 +194,14 @@ func Complete(s *store.Store, taskID int, finalMessage string) (Completed, error
 	var brandID, dealID *int
 	err = tx.QueryRow(`SELECT rule_id, title, channel, for_date, status, brand_id, deal_id FROM tasks WHERE id = ?`, taskID).
 		Scan(&ruleID, &title, &channel, &forDate, &status, &brandID, &dealID)
-	if err == sql.ErrNoRows || (err == nil && status != "open") {
-		return Completed{}, nil
+	if err == sql.ErrNoRows {
+		return Completed{}, crm.NotFound("task", taskID)
 	}
 	if err != nil {
 		return Completed{}, err
+	}
+	if status != "open" {
+		return Completed{Title: title, Channel: channel, BrandID: brandID, Reason: fmt.Sprintf("Task %d is already %s, so nothing was changed.", taskID, status)}, nil
 	}
 	at := s.Stamp(forDate, "10:30:00")
 	if _, err := tx.Exec(`UPDATE tasks SET status = 'done', draft_message = ?, completed_at = ? WHERE id = ?`, finalMessage, at, taskID); err != nil {
@@ -192,16 +219,21 @@ func Complete(s *store.Store, taskID int, finalMessage string) (Completed, error
 			return Completed{}, err
 		}
 	}
+	var messageID *int
 	if brandID != nil && channel != "internal" {
-		if _, err := tx.Exec(`INSERT INTO messages (brand_id, direction, channel, body, sent_at, read_at, task_id, deal_id, brief_status) VALUES (?, 'out', ?, ?, ?, ?, ?, ?, 'none')`,
-			*brandID, channel, finalMessage, at, at, taskID, dealID); err != nil {
+		res, err := tx.Exec(`INSERT INTO messages (brand_id, direction, channel, body, sent_at, read_at, task_id, deal_id, brief_status) VALUES (?, 'out', ?, ?, ?, ?, ?, ?, 'none')`,
+			*brandID, channel, finalMessage, at, at, taskID, dealID)
+		if err != nil {
 			return Completed{}, err
 		}
+		id64, _ := res.LastInsertId()
+		id := int(id64)
+		messageID = &id
 	}
 	if ruleID == "post_plus_7" && dealID != nil {
 		if _, err := tx.Exec(`UPDATE deals SET stage = 'report_sent' WHERE id = ? AND stage = 'posted'`, *dealID); err != nil {
 			return Completed{}, err
 		}
 	}
-	return Completed{Done: true, Title: title, Channel: channel, BrandID: brandID, Body: finalMessage}, tx.Commit()
+	return Completed{Done: true, Title: title, Channel: channel, BrandID: brandID, Body: finalMessage, MessageID: messageID}, tx.Commit()
 }

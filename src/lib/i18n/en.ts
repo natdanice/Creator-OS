@@ -67,6 +67,7 @@ export const en: Dict = {
     brief_received: "Brief received",
     quote_sent: "Quote sent",
     draft_sent: "Draft sent",
+    stage_change: "Stage change",
     revision: "Revision",
     posted: "Posted",
     report_sent: "Report sent",

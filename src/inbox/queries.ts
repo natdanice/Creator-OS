@@ -87,6 +87,7 @@ export function commentQueue(
       author: comments.authorPseudoId,
       createdAt: comments.createdAt,
       replyText: comments.replyText,
+      status: comments.replyStatus,
       contentTitle: contents.title,
       productCategory: contents.productCategory,
       isSponsored: contents.isSponsored,

@@ -255,6 +255,7 @@ type Comment struct {
 	Author          string  `json:"author"`
 	CreatedAt       string  `json:"createdAt"`
 	ReplyText       *string `json:"replyText"`
+	Status          string  `json:"status"` // open, replied or hidden
 	ContentTitle    string  `json:"contentTitle"`
 	ProductCategory string  `json:"productCategory"`
 	IsSponsored     bool    `json:"isSponsored"`
@@ -263,8 +264,9 @@ type Comment struct {
 type CommentFilter struct {
 	Category string // a comment category, or "" / "needs_reply"
 	Platform string
-	Status   string // open | replied | hidden
-	Limit    int
+	Status   string // open | replied | hidden (default open)
+	Limit    int    // page size (default 40)
+	Offset   int    // rows to skip, for paging
 }
 
 // CommentQueue lists comments to triage (people who withdrew consent never appear): product questions
@@ -299,12 +301,12 @@ func CommentQueue(db *sql.DB, today string, f CommentFilter) ([]Comment, int, er
 		return nil, 0, err
 	}
 	rows, err := db.Query(`
-		SELECT c.id, c.text, c.category, c.platform_id, c.author_pseudo_id, c.created_at, c.reply_text,
+		SELECT c.id, c.text, c.category, c.platform_id, c.author_pseudo_id, c.created_at, c.reply_text, c.reply_status,
 		       ct.title, ct.product_category, ct.is_sponsored
 		FROM comments c JOIN contents ct ON ct.id = c.content_id
 		WHERE `+where+`
 		ORDER BY CASE c.category WHEN 'product_question' THEN 0 WHEN 'general_question' THEN 1 ELSE 2 END, c.created_at DESC, c.id DESC
-		LIMIT ?`, append(args, limit)...)
+		LIMIT ? OFFSET ?`, append(args, limit, f.Offset)...)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -312,7 +314,7 @@ func CommentQueue(db *sql.DB, today string, f CommentFilter) ([]Comment, int, er
 	out := []Comment{}
 	for rows.Next() {
 		var c Comment
-		if err := rows.Scan(&c.ID, &c.Text, &c.Category, &c.PlatformID, &c.Author, &c.CreatedAt, &c.ReplyText, &c.ContentTitle, &c.ProductCategory, &c.IsSponsored); err != nil {
+		if err := rows.Scan(&c.ID, &c.Text, &c.Category, &c.PlatformID, &c.Author, &c.CreatedAt, &c.ReplyText, &c.Status, &c.ContentTitle, &c.ProductCategory, &c.IsSponsored); err != nil {
 			return nil, 0, err
 		}
 		out = append(out, c)

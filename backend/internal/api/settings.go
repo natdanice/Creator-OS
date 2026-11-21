@@ -14,7 +14,7 @@ func (s *Server) routeSettings(mux *http.ServeMux) {
 }
 
 func (s *Server) settingsData(w http.ResponseWriter, _ *http.Request) {
-	d, err := settings.Load(s.Store.DB)
+	d, err := settings.Load(s.Store.DB, s.Store.Today())
 	if err != nil {
 		serverError(w, err)
 		return
@@ -30,12 +30,12 @@ func (s *Server) saveRates(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "need a JSON body {\"prices\": {\"CODE\": 12000}}")
 		return
 	}
-	n, err := settings.SaveRates(s.Store.DB, in.Prices)
+	changes, err := settings.SaveRates(s.Store.DB, in.Prices)
 	if err != nil {
-		serverError(w, err)
+		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"changed": n})
+	ok(w, map[string]any{"changed": len(changes), "updated": changes})
 }
 
 func (s *Server) saveProfile(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +45,7 @@ func (s *Server) saveProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := settings.SaveProfile(s.Store, in); err != nil {
-		serverError(w, err)
+		writeError(w, err)
 		return
 	}
 	ok(w, map[string]any{"ok": true})

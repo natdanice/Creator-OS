@@ -50,12 +50,36 @@
   .note { font-size: 13px; color: var(--muted); margin-top: 28px; }
   code { background: var(--code); border-radius: 5px; padding: 1px 5px; font-size: 13px; }
   @media (max-width: 520px) { .s { padding-left: 0; } .bar label { margin-left: 0; width: 100%; } .bar label input { flex: 1; } }
+
+  .mcp { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 16px 12px; margin: 20px 0 8px; }
+  .mcp h2 { margin: 0 0 6px; color: var(--accent); }
+  .mcp p { margin: 6px 0; color: var(--ink-2); max-width: 70ch; }
+  .mcp details { background: var(--bg); }
+  .urlrow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 10px 0; }
+  .urlrow code { font-size: 14px; padding: 6px 10px; flex: 1 1 260px; overflow-wrap: anywhere; }
+  button.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 5px 12px; }
+  pre.snip { margin: 0; user-select: all; }
+  .hint { font-size: 13px; color: var(--muted); margin: 0; }
+  .tools { display: grid; gap: 0; margin-top: 4px; }
+  .tool { display: grid; grid-template-columns: 190px 1fr; gap: 2px 14px; padding: 9px 0; border-top: 1px solid var(--line); font-size: 13.5px; }
+  .tool:first-child { border-top: 0; }
+  .tool .n { font: 600 13px ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
+  .tool .d { color: var(--ink-2); }
+  .tool .a { grid-column: 2; display: flex; flex-wrap: wrap; gap: 4px; }
+  .tool .a code { font-size: 12px; color: var(--muted); }
+  .badge { display: inline-block; font: 700 10.5px system-ui, sans-serif; letter-spacing: .04em; padding: 1px 7px; border-radius: 999px; margin-left: 6px; vertical-align: 1px; }
+  .badge.read { background: var(--code); color: var(--good); }
+  .badge.write { background: var(--accent-soft); color: var(--accent); }
+  .badge.off { background: var(--code); color: var(--muted); }
+  .tool.off .n, .tool.off .d { opacity: .55; }
+  #mcpStatus.ok { color: var(--good); font-weight: 600; } #mcpStatus.err { color: var(--bad); font-weight: 600; }
+  @media (max-width: 520px) { .tool { grid-template-columns: 1fr; } .tool .a { grid-column: 1; } }
 </style>
 </head>
 <body>
 <main>
   <h1>Creator OS API</h1>
-  <p class="lead">The backend behind the Creator OS app. It reads and writes the same SQLite database as the web app and returns JSON. Open an endpoint below to try it.</p>
+  <p class="lead">The backend behind the Creator OS app. It reads and writes the same SQLite database as the web app and returns JSON. Open an endpoint below to try it, or <a href="#mcp" style="color:var(--accent)">connect an AI assistant</a>.</p>
 
   <div class="bar" role="status">
     <span><span class="dot" id="dot"></span><span id="state">Checking…</span></span>
@@ -63,6 +87,8 @@
     <span id="today" style="color:var(--muted);font-size:13px"></span>
     <label id="tokenBox" hidden>API token <input id="token" type="password" autocomplete="off" placeholder="Bearer token" size="22"></label>
   </div>
+
+  <section class="mcp" id="mcp" aria-labelledby="mcpH"></section>
 
   <div id="list"></div>
 
@@ -138,6 +164,81 @@ for (const e of DATA.endpoints) {
   if (e.group !== group) { group = e.group; list.append(el("h2", {}, group)); }
   list.append(card(e));
 }
+
+/* ── Connect your AI (MCP) ── */
+(function () {
+  const M = DATA.mcp, box = $("mcp");
+  const url = location.origin + "/mcp";
+  const needsToken = DATA.tokenRequired;
+  const isLocal = ["127.0.0.1", "localhost", "[::1]"].includes(location.hostname);
+  const TOKEN = "YOUR_API_TOKEN";
+
+  function copyBtn(getText) {
+    const b = el("button", { type: "button", class: "ghost" }, "Copy");
+    b.addEventListener("click", async () => {
+      try { await navigator.clipboard.writeText(getText()); b.textContent = "Copied"; } catch { b.textContent = "Select the text and copy"; }
+      setTimeout(() => (b.textContent = "Copy"), 1800);
+    });
+    return b;
+  }
+  function snippet(title, text, hint) {
+    return el("details", {},
+      el("summary", {}, el("span", { class: "p" }, title)),
+      el("div", { class: "try" }, hint ? el("p", { class: "hint" }, hint) : "", el("pre", { class: "out snip" }, text), el("div", { class: "row" }, copyBtn(() => text))));
+  }
+
+  const claudeCode = "claude mcp add --transport http creator-os " + url + (needsToken ? ' --header "Authorization: Bearer ' + TOKEN + '"' : "");
+  const urlConfig = JSON.stringify({ mcpServers: { "creator-os": needsToken ? { url, headers: { Authorization: "Bearer " + TOKEN } } : { url } } }, null, 2);
+  const proxyArgs = ["-y", "mcp-remote", url];
+  if (url.startsWith("http:") && !isLocal) proxyArgs.push("--allow-http");
+  const proxyServer = { command: "npx", args: proxyArgs };
+  if (needsToken) { proxyServer.args.push("--header", "Authorization:${AUTH_HEADER}"); proxyServer.env = { AUTH_HEADER: "Bearer " + TOKEN }; }
+  const desktopConfig = JSON.stringify({ mcpServers: { "creator-os": proxyServer } }, null, 2);
+  const curl = "curl -X POST " + url + ' \\\n  -H "Content-Type: application/json" \\\n' + (needsToken ? '  -H "Authorization: Bearer ' + TOKEN + '" \\\n' : "") + `  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`;
+
+  const status = el("span", { id: "mcpStatus" });
+  const test = el("button", { type: "button" }, "Test connection");
+  test.addEventListener("click", async () => {
+    test.disabled = true; status.className = ""; status.textContent = "…";
+    const headers = { "Content-Type": "application/json" };
+    if (tokenInput.value) headers.Authorization = "Bearer " + tokenInput.value;
+    try {
+      const res = await fetch("/mcp", { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/list" }) });
+      if (res.status === 401) throw new Error("wrong or missing API token (type it in the bar above)");
+      const j = await res.json();
+      if (!j.result) throw new Error(JSON.stringify(j.error || j));
+      status.className = "ok"; status.textContent = "Working: " + j.result.tools.length + " tools available";
+    } catch (e) { status.className = "err"; status.textContent = "Failed: " + e.message; }
+    finally { test.disabled = false; }
+  });
+
+  const tools = el("div", { class: "tools" });
+  for (const t of M.tools) {
+    const off = t.write && !M.write;
+    const badge = !t.write ? el("span", { class: "badge read" }, "READ") : el("span", { class: "badge " + (off ? "off" : "write") }, off ? "WRITE · OFF" : "WRITE · ON");
+    tools.append(el("div", { class: "tool" + (off ? " off" : "") },
+      el("div", { class: "n" }, t.name, badge),
+      el("div", { class: "d" }, t.description),
+      (t.params || []).length ? el("div", { class: "a" }, t.params.map((p) => el("code", { title: p.description }, p.name + (p.required ? "*" : "")))) : ""));
+  }
+  const nRead = M.tools.filter((t) => !t.write).length, nWrite = M.tools.length - nRead;
+
+  box.append(
+    el("h2", { id: "mcpH" }, "Connect your AI (MCP)"),
+    el("p", {}, "Let Claude, Cursor or any other MCP-compatible AI assistant read and manage this creator's brands, deals, inbox, audience, finance, automation and settings, using only a URL. Point it at:"),
+    el("div", { class: "urlrow" }, el("code", {}, url), copyBtn(() => url)),
+    el("p", {}, M.write
+      ? "Full access: the AI can read everything and also change it (add brands, move deals, mark invoices paid, record replies, approve tasks, change rates and profile). These edit the real records. Nothing is ever sent to a brand or fan from here: replies are only recorded, and you send them from the web app. To make it read-only, start the API with MCP_READ_ONLY=1."
+      : "Read-only (MCP_READ_ONLY=1): the AI can look but not change anything. Remove that setting to allow writes."),
+    needsToken ? el("p", {}, "This API needs a token: give your AI the same API_TOKEN as an Authorization: Bearer header (shown in the setups below).") : el("p", {}, "No token is set, so this API only accepts connections from this computer. To let others connect, set API_TOKEN and listen beyond localhost."),
+    el("div", { class: "row", style: "margin: 10px 0" }, test, status),
+    snippet("Claude Code", claudeCode, "Run this once in a terminal."),
+    snippet("Cursor, VS Code and other apps that take a URL", urlConfig, "Paste into the app's MCP settings file (for example .cursor/mcp.json)."),
+    snippet("Claude Desktop (and apps that only run local commands)", desktopConfig, "Add to claude_desktop_config.json, then restart the app. Needs Node.js for npx; mcp-remote bridges the URL."),
+    snippet("Test from a terminal", curl),
+    el("details", {}, el("summary", {}, el("span", { class: "p" }, "All tools (" + nRead + " read" + (nWrite ? " + " + nWrite + " write" : "") + ")")), el("div", { class: "try" }, tools, el("p", { class: "hint" }, "* required. Hover a name for what it means. Write tools carry hints so AI apps can ask you before running the ones that change or remove data."))),
+  );
+})();
 </script>
 </body>
 </html>

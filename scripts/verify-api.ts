@@ -111,6 +111,16 @@ async function inboxChecks(db: ReturnType<typeof getDb>, today: string) {
       }
 }
 
+/** Newest follower count per platform as of today: the one source Settings, the Audience page and the MCP tools use. */
+function latestFollowers(db: ReturnType<typeof getDb>, today: string): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const p of db.select().from(platforms).all()) {
+    const f = db.get<{ f: number } | undefined>(sql`select followers as f from audience_snapshots where platform_id = ${p.id} and month <= ${today.slice(0, 7)} order by month desc, id desc limit 1`)?.f;
+    if (f !== undefined) out[p.id] = f;
+  }
+  return out;
+}
+
 async function audienceChecks(db: ReturnType<typeof getDb>, today: string) {
   const months = availableMonths(db, today);
   const seg = audienceSegments(db, today);
@@ -129,6 +139,7 @@ async function audienceChecks(db: ReturnType<typeof getDb>, today: string) {
           series: followerSeries(db, today),
           splitMonth: split,
           demographics: demo,
+          latestFollowers: latestFollowers(db, today),
           segments: { activePeople: seg.activePeople, excludedSpam: seg.excludedSpam, summaries: seg.summaries },
           spikingSegments: productQuestionSpikes(db, today).filter((s) => s.isSpike).map((s) => `askers_${s.category}`),
         },
@@ -154,7 +165,7 @@ async function automationChecks(db: ReturnType<typeof getDb>) {
   check("automation: recent runs", db.select().from(automationRuns).orderBy(desc(automationRuns.id)).limit(8).all(), go.runs);
 }
 
-async function settingsChecks(db: ReturnType<typeof getDb>) {
+async function settingsChecks(db: ReturnType<typeof getDb>, today: string) {
   const { settings: go } = await get<{ settings: Record<string, unknown> }>("/api/v1/settings");
   const plats = db.select().from(platforms).all();
   check("settings: platforms", plats, go.platforms);
@@ -163,8 +174,7 @@ async function settingsChecks(db: ReturnType<typeof getDb>) {
   check("settings: import history", db.select().from(importRuns).orderBy(desc(importRuns.startedAt), desc(importRuns.id)).all(), go.importRuns);
   check("settings: consent summary", consentSummary(db), go.consent);
   check("settings: redacted comments", db.select({ n: sql<number>`count(*)` }).from(comments).where(eq(comments.redacted, true)).get()!.n, go.redactedComments);
-  const followers = Object.fromEntries(plats.map((p) => [p.id, db.get<{ f: number } | undefined>(sql`select followers as f from audience_snapshots where platform_id = ${p.id} order by month desc limit 1`)?.f]).filter(([, f]) => f !== undefined));
-  check("settings: latest follower counts", followers, go.latestFollowers);
+  check("settings: latest follower counts", latestFollowers(db, today), go.latestFollowers);
 }
 
 async function brand360Checks(db: ReturnType<typeof getDb>, today: string) {
@@ -225,7 +235,7 @@ async function main() {
   await inboxChecks(db, today);
   await audienceChecks(db, today);
   await automationChecks(db);
-  await settingsChecks(db);
+  await settingsChecks(db, today);
   await brand360Checks(db, today);
 
   console.log(failed ? `\n${failed} check(s) differ.` : "\nGo API matches the TypeScript code.");

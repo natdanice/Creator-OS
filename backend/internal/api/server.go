@@ -24,6 +24,10 @@ type Server struct {
 	Store *store.Store
 	Token string // when set, required on every request except /api/v1/health
 
+	MCPReadOnly bool // MCP_READ_ONLY=1: hide the write tools on /mcp (they are on by default)
+
+	inner http.Handler // the routes without auth/logging, for the MCP tools to call in-process
+
 	routes []string // every registered "METHOD /path", for the docs page and its test
 }
 
@@ -52,8 +56,11 @@ func (s *Server) Handler() http.Handler {
 	s.routeAudience(mux)
 	s.routeAutomation(mux)
 	s.routeSettings(mux)
+	s.reg(mux, "POST /mcp", s.mcp)
+	mux.HandleFunc("GET /mcp", mcpMethodNotAllowed)
 	s.reg(mux, "GET /{$}", s.docsPage)
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) { fail(w, http.StatusNotFound, "no such endpoint") })
+	s.inner = mux
 	return s.logged(s.authed(mux))
 }
 
@@ -108,11 +115,14 @@ func serverError(w http.ResponseWriter, err error) {
 // writeError maps domain errors to HTTP statuses.
 func writeError(w http.ResponseWriter, err error) {
 	var invalid crm.ErrInvalid
+	var conflict crm.ErrConflict
 	switch {
 	case errors.Is(err, crm.ErrNotFound):
-		fail(w, http.StatusNotFound, "not found")
+		fail(w, http.StatusNotFound, err.Error()) // "No brand with id 9": says what was looked up
 	case errors.As(err, &invalid):
 		fail(w, http.StatusBadRequest, invalid.Error())
+	case errors.As(err, &conflict):
+		fail(w, http.StatusConflict, conflict.Error())
 	default:
 		serverError(w, err)
 	}
@@ -209,7 +219,7 @@ func (s *Server) brand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if p == nil {
-		fail(w, http.StatusNotFound, "not found")
+		writeError(w, crm.NotFound("brand", id))
 		return
 	}
 	ok(w, map[string]any{"today": t, "brand": p})
@@ -259,12 +269,12 @@ func (s *Server) moveStage(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "need a deal id and a JSON body {\"stage\": ...}")
 		return
 	}
-	changed, err := crm.MoveDealStage(s.Store, id, in.Stage)
+	res, err := crm.MoveDealStage(s.Store, id, in.Stage)
 	if err != nil {
 		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"changed": changed})
+	ok(w, res)
 }
 
 func (s *Server) finance(w http.ResponseWriter, _ *http.Request) {
@@ -303,11 +313,12 @@ func (s *Server) markPaid(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "bad invoice id")
 		return
 	}
-	if err := crm.MarkInvoicePaid(s.Store, id); err != nil {
+	res, err := crm.MarkInvoicePaid(s.Store, id)
+	if err != nil {
 		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"ok": true})
+	ok(w, res)
 }
 
 var _ = cdp.MaxGapHours // the grouping rules are used through overview

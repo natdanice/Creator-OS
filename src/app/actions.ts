@@ -248,7 +248,7 @@ export async function saveRatesAction(formData: FormData) {
   for (const [key, raw] of formData.entries()) {
     if (!key.startsWith("price_")) continue;
     const price = Number(raw);
-    if (Number.isFinite(price)) prices[key.slice(6)] = price;
+    if (Number.isFinite(price)) prices[key.slice(6)] = Math.round(price); // money is whole baht
   }
   await saveRatesApi(prices);
   revalidateAll();

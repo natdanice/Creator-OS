@@ -74,7 +74,7 @@ func (s *Server) taskComplete(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := automation.Complete(s.Store, id, in.Message)
 	if err != nil {
-		serverError(w, err)
+		writeError(w, err)
 		return
 	}
 	ok(w, res)
@@ -86,9 +86,10 @@ func (s *Server) taskDismiss(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, "bad task id")
 		return
 	}
-	if err := automation.Dismiss(s.Store.DB, id); err != nil {
-		serverError(w, err)
+	res, err := automation.Dismiss(s.Store.DB, id)
+	if err != nil {
+		writeError(w, err)
 		return
 	}
-	ok(w, map[string]any{"ok": true})
+	ok(w, res)
 }

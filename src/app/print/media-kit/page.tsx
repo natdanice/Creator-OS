@@ -95,7 +95,7 @@ export default async function MediaKitPage() {
                 </td>
                 <td className="py-2 text-right">{posts.find((x) => x.platformId === p)?.n ?? 0}</td>
                 <td className="py-2 text-right">{num(ov.kpis.views.byPlatform[p])}</td>
-                <td className="py-2 text-right">{pct(ov.kpis.er.byPlatform[p], 2)}</td>
+                <td className="py-2 text-right">{ov.kpis.er.byPlatform[p] === null ? "—" : pct(ov.kpis.er.byPlatform[p]!, 2)}</td>
               </tr>
             ))}
           </tbody>
@@ -117,7 +117,7 @@ export default async function MediaKitPage() {
                 ))}
               </span>
               <span className="tabular shrink-0 text-ink-2">
-                {num(c.views)} · ER {pct(c.er)}
+                {num(c.views)} · ER {c.er === null ? "—" : pct(c.er)}
               </span>
             </li>
           ))}

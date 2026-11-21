@@ -30,7 +30,7 @@ func main() {
 	}
 	srv := &http.Server{
 		Addr:              cfg.Addr,
-		Handler:           (&api.Server{Store: st, Token: cfg.Token}).Handler(),
+		Handler:           (&api.Server{Store: st, Token: cfg.Token, MCPReadOnly: cfg.MCPReadOnly}).Handler(),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      60 * time.Second,
@@ -41,6 +41,11 @@ func main() {
 		mode = "LIVE"
 	}
 	log.Printf("Creator OS API on http://%s · %s mode · today %s · database %s", cfg.Addr, mode, st.Today(), cfg.DBPath)
+	if cfg.MCPReadOnly {
+		log.Printf("MCP at /mcp: READ-ONLY (MCP_READ_ONLY=1)")
+	} else {
+		log.Printf("MCP at /mcp: read + WRITE tools (set MCP_READ_ONLY=1 to hide the write tools)")
+	}
 
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, os.Interrupt, syscall.SIGTERM)

@@ -66,6 +66,7 @@ export const th = {
     brief_received: "รับบรีฟ",
     quote_sent: "ส่งใบเสนอราคา",
     draft_sent: "ส่งดราฟต์",
+    stage_change: "เปลี่ยนสถานะ",
     revision: "แก้ไขงาน",
     posted: "โพสต์งาน",
     report_sent: "ส่งรายงาน",

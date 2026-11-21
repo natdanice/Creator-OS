@@ -34,7 +34,7 @@ export const RATE_CARD: RateCardItem[] = [
   { code: "IG_STORY", name: "IG Story 3 เฟรม", platformId: "instagram", kind: "single", description: "สตอรี่ 3 เฟรม พร้อมลิงก์สติกเกอร์", price: 6000, includes: [] },
   { code: "YT_INTEGRATION", name: "YouTube Integration 60–90 วิ", platformId: "youtube", kind: "single", description: "ช่วงพูดถึงสินค้าในคลิปหลัก", price: 20000, includes: ["YT_INTEGRATION"] },
   { code: "YT_DEDICATED", name: "YouTube รีวิวเต็มคลิป", platformId: "youtube", kind: "single", description: "คลิปรีวิวเฉพาะสินค้า 8–12 นาที", price: 45000, includes: ["YT_DEDICATED"] },
-  { code: "BUNDLE_3P", name: "แพ็กเกจ 3 แพลตฟอร์ม", platformId: null, kind: "bundle", description: "TikTok + IG Reel + YouTube Integration (ประหยัดกว่าแยก 8,000)", price: 45000, includes: ["TT_VIDEO", "IG_REEL", "YT_INTEGRATION"] },
+  { code: "BUNDLE_3P", name: "แพ็กเกจ 3 แพลตฟอร์ม", platformId: null, kind: "bundle", description: "TikTok + IG Reel + YouTube Integration (ราคาแพ็กเกจพิเศษ)", price: 45000, includes: ["TT_VIDEO", "IG_REEL", "YT_INTEGRATION"] },
   { code: "RETAINER_Q", name: "Retainer รายไตรมาส", platformId: null, kind: "retainer", description: "แพ็กเกจ 3 แพลตฟอร์ม × 3 เดือน ส่วนลด 10%", price: 121500, includes: ["TT_VIDEO", "IG_REEL", "YT_INTEGRATION"] },
   { code: "ADDON_USAGE", name: "สิทธิ์ใช้คอนเทนต์ 30 วัน", platformId: null, kind: "addon", description: "แบรนด์นำคลิปไปใช้ในโฆษณาได้ 30 วัน", price: 8000, includes: [] },
   { code: "ADDON_SPARK", name: "Spark Ads / Whitelisting code", platformId: null, kind: "addon", description: "ให้โค้ดโปรโมตโพสต์จากบัญชีครีเอเตอร์", price: 5000, includes: [] },

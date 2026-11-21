@@ -45,8 +45,9 @@ export function computeBrandStats(db: DB, today: string): BrandStats[] {
   return allBrands.map((brand) => {
     const ds = allDeals.filter((d) => d.brandId === brand.id);
     const paidInWindow = ds.filter((d) => d.stage === "paid" && d.closedAt && d.closedAt.slice(0, 10) >= windowStart && d.closedAt.slice(0, 10) <= today).length;
-    const won = ds.filter((d) => isWon(d.stage));
-    const lifetimeValue = won.reduce((s, d) => s + d.value, 0);
+    const won = ds.filter((d) => isWon(d.stage)); // committed (Production or later), paid or not
+    const paid = ds.filter((d) => d.stage === "paid"); // jobs and lifetime value are money actually earned
+    const lifetimeValue = paid.reduce((s, d) => s + d.value, 0);
     const dealValueThisYear = won.filter((d) => d.createdAt.startsWith(year)).reduce((s, d) => s + d.value, 0);
     const posted = ds.map((d) => d.postedAt).filter((p): p is string => !!p && p.slice(0, 10) <= today).sort();
     const lastJobAt = posted.at(-1) ?? null;
@@ -60,9 +61,9 @@ export function computeBrandStats(db: DB, today: string): BrandStats[] {
       tier: tierFor(paidInWindow),
       paidInWindow,
       dealValueThisYear,
-      jobs: won.length,
+      jobs: paid.length,
       lifetimeValue,
-      avgDealSize: won.length ? Math.round(lifetimeValue / won.length) : 0,
+      avgDealSize: paid.length ? Math.round(lifetimeValue / paid.length) : 0,
       lastJobAt,
       daysSinceLastJob: lastJobAt ? diffDays(lastJobAt, today) : null,
       lastActivityAt,

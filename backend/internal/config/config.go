@@ -10,12 +10,13 @@ import (
 )
 
 type Config struct {
-	Addr      string // listen address, local only by default
-	DBPath    string
-	Live      bool   // APP_MODE=live: real Bangkok date, live database
-	Token     string // API_TOKEN: when set, every request except /health must send "Authorization: Bearer <token>"
-	StoryDate string // demo-mode "today" when app_settings has none
-	Root      string // project root (the folder with package.json and drizzle/)
+	Addr        string // listen address, local only by default
+	DBPath      string
+	Live        bool   // APP_MODE=live: real Bangkok date, live database
+	Token       string // API_TOKEN: when set, every request except /health must send "Authorization: Bearer <token>"
+	MCPReadOnly bool   // MCP_READ_ONLY=1: hide the MCP write tools (they are on by default)
+	StoryDate   string // demo-mode "today" when app_settings has none
+	Root        string // project root (the folder with package.json and drizzle/)
 }
 
 const DefaultStoryDate = "2026-10-31"
@@ -79,12 +80,13 @@ func Load() Config {
 	}
 	host := getenv("API_HOST", "127.0.0.1")
 	return Config{
-		Addr:      host + ":" + getenv("API_PORT", "8080"),
-		DBPath:    db,
-		Live:      live,
-		Token:     os.Getenv("API_TOKEN"),
-		StoryDate: DefaultStoryDate,
-		Root:      root,
+		Addr:        host + ":" + getenv("API_PORT", "8080"),
+		DBPath:      db,
+		Live:        live,
+		Token:       os.Getenv("API_TOKEN"),
+		MCPReadOnly: os.Getenv("MCP_READ_ONLY") == "1",
+		StoryDate:   DefaultStoryDate,
+		Root:        root,
 	}
 }
 
