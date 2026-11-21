@@ -190,6 +190,41 @@ sending (Gmail drafts, LINE messages).
 
 ---
 
+## MCP server (`mcp/`) — for external AI
+
+An [MCP](https://modelcontextprotocol.io) server that lets an outside AI (Claude Desktop, Claude Code, Cursor…)
+read your Creator OS data. It is a thin layer over the Go API, so the Go API must be running (`./start.sh`).
+It talks over stdio and starts on demand: you don't run it yourself.
+
+**Read-only by default (17 tools):** `get_context`, `get_today`, `get_overview`, `list_brands`, `get_brand`,
+`get_pipeline`, `get_finance`, `export_income_csv`, `get_inbox`, `list_inbox_threads`, `get_inbox_thread`,
+`list_comments`, `get_audience`, `list_segment_members`, `get_audience_member`, `get_automation`, `get_settings`.
+
+**Writes are opt-in:** set `CREATOR_OS_MCP_WRITE=1` to add `create_brand`, `move_deal_stage` and
+`mark_invoice_paid`. Sending anything to a brand or fan (inbox and comment replies, completing automation tasks),
+changing settings and account credentials are never exposed: those stay in the app.
+
+Add it to your AI app's MCP config (use the absolute path to this folder):
+
+```json
+{
+  "mcpServers": {
+    "creator-os": {
+      "command": "npm",
+      "args": ["--silent", "--prefix", "/absolute/path/to/Creator OS", "run", "mcp"],
+      "env": { "CREATOR_OS_API_URL": "http://127.0.0.1:8080" }
+    }
+  }
+}
+```
+
+Claude Code: `claude mcp add creator-os -- npm --silent --prefix "/absolute/path/to/Creator OS" run mcp`.
+Settings: `CREATOR_OS_API_URL` (default `http://127.0.0.1:8080`), `CREATOR_OS_API_TOKEN` (the Go API's `API_TOKEN`, if set),
+`CREATOR_OS_MCP_WRITE`. Whichever database the Go API runs on (demo or live) is what the AI sees, so in live mode
+it can read your real brands, invoices and audience: only connect AI apps you trust with that.
+
+---
+
 ## Architecture — the 4 CDP stages
 
 The CDP is the single source that both the **data side** and the **marketing/sales side** work from.
