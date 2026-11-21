@@ -1,0 +1,27 @@
+# Keep the build context small and keep real data and secrets out of the image.
+.git
+.gitignore
+node_modules
+.next
+out
+.run
+tsconfig.tsbuildinfo
+backend/bin
+
+# Secrets and real data never go into an image
+.env*
+!.env.example
+data/*.db
+data/*.db-*
+data/uploads
+data/import
+
+# macOS launchers and host-only scripts
+*.app
+start.sh
+stop.sh
+docker-build.sh
+.DS_Store
+Dockerfile
+.dockerignore
+docker-compose.yml

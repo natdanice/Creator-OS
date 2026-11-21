@@ -1,0 +1,32 @@
+# docker compose up --build        then open http://127.0.0.1:3000
+# Demo data by default. For your real data: APP_MODE=live APP_PASSWORD=... AUTH_SECRET=... docker compose up
+# (put those in a .env file next to this one, or export them; see .env.example for every setting).
+services:
+  creator-os:
+    build: .
+    image: creator-os
+    restart: unless-stopped
+    ports:
+      # Local only. Remove "127.0.0.1:" only after setting APP_PASSWORD, and put HTTPS in front of it.
+      - "127.0.0.1:${WEB_PORT:-3000}:3000"
+      # The Go API and its MCP endpoint (http://127.0.0.1:8080/mcp). Uncomment this AND set API_HOST=0.0.0.0 and API_TOKEN below:
+      # - "127.0.0.1:${API_PORT:-8080}:8080"
+    environment:
+      - APP_MODE=${APP_MODE:-demo}             # demo | live
+      - APP_URL=${APP_URL:-http://localhost:3000}
+      # The rest are passed through only when you set them (in your shell or in a .env file next to this one),
+      # so an unset one stays unset inside the container instead of becoming an empty string:
+      - APP_PASSWORD                           # login password: always set it in live mode
+      - AUTH_SECRET                            # openssl rand -base64 32
+      - CRON_SECRET
+      - PSEUDONYM_SALT                         # set your own before the first import in live mode
+      - ANTHROPIC_API_KEY
+      - RESET_DEMO                             # 1 = re-seed the demo on every start
+      - MCP_READ_ONLY                          # 1 = AI assistants at /mcp can only read (writes are on by default)
+      # - API_HOST=0.0.0.0                     # only together with the API port above and a token:
+      # - API_TOKEN
+    volumes:
+      - creator-os-data:/app/data              # the SQLite database and uploads
+
+volumes:
+  creator-os-data:

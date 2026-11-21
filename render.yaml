@@ -1,7 +1,8 @@
 # Render Blueprint — free demo hosting for the class presentation.
 # NOTE: the Overview, Brands (and Brand 360), Pipeline, Finance, Inbox, Audience, Automation and Settings pages now read from the Go API in /backend, and this
 # Node-only service does not run it, so those pages show "API isn't reachable" here. To host the demo,
-# run both processes in one container (a Dockerfile with Node + Go, started with ./start.sh --prod)
+# run both processes in one container: the Dockerfile in the project root does that (use `runtime: docker`, and a
+# persistent disk mounted at /app/data to keep your data)
 # or deploy the API as a second service and set API_URL on this one.
 # The free plan has no persistent disk, so every start rebuilds the demo
 # database from the seed (`start:demo`). Changes made in the app are lost
