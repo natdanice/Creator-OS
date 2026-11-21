@@ -45,6 +45,10 @@ your real data (live mode) and open it in the browser. Double-click it again whi
 **Stop** it. Drag it to the Dock if you like, but keep the app file inside this folder (it finds `start.sh` from
 its own location). If it fails to start, the reason is in `.run/launcher.log`.
 
+**Creator OS API.app** (dark icon, "C / API") starts only the Go backend and opens its front page at
+`http://127.0.0.1:8080/`; click it again to **Open** or **Stop** the API. Stopping the API alone leaves the web app
+without data, so use Creator OS.app to stop both. Its log is `.run/launcher-api.log`.
+
 `./start.sh live` runs on your real data, and `./start.sh --prod` builds and runs the production servers
 (see [Go API](#go-api-backend)). Requirements: Node 22+ (tested on Node 24.19, macOS) and Go 1.26+ for the API. The SQLite driver ships prebuilt binaries for macOS, Windows and Linux, so no compiler is needed. The database is a single local SQLite file at
 `data/creator-os.db`; no server needed.
